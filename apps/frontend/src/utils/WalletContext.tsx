@@ -14,8 +14,8 @@ interface WalletContextType {
   wallets: Wallet[];
   masterPassword: string | null;
   setMasterPassword: (password: string) => void;
-  addWallet: (name: string) => Promise<Wallet | null>;
-  importWallet: (name: string, privateKey: string) => Promise<Wallet | null>;
+  addWallet: (name?: string) => Promise<Wallet | null>;
+  importWallet: (name: string | undefined, privateKey: string) => Promise<Wallet | null>;
   bulkImportWallets: (inputs: string[]) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
   removeWallet: (id: string) => void;
   getDecryptedWallet: (id: string) => Promise<{ privateKey: string; address: string } | null>;
@@ -215,7 +215,29 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     message.success("Master password set successfully");
   };
 
-  const addWallet = async (name: string): Promise<Wallet | null> => {
+  // Helper function to generate a wallet name based on type and existing wallets
+  const generateWalletName = (type: "Generated" | "Imported"): string => {
+    // Filter wallets by the specified type prefix
+    const typePrefix = `${type} Wallet #`;
+    const existingWallets = wallets.filter(w => w.name.startsWith(typePrefix));
+    
+    // Find the highest number used
+    let highestNumber = 0;
+    existingWallets.forEach(wallet => {
+      const match = wallet.name.match(new RegExp(`${typePrefix}(\\d+)`));
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num > highestNumber) {
+          highestNumber = num;
+        }
+      }
+    });
+    
+    // Return the next number in sequence
+    return `${typePrefix}${highestNumber + 1}`;
+  };
+
+  const addWallet = async (name?: string): Promise<Wallet | null> => {
     if (!masterPassword) {
       message.error("Master password not set");
       return null;
@@ -225,9 +247,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       const newWallet = generateWallet();
       const encryptedPrivateKey = await encryptWallet(newWallet.privateKey, masterPassword);
       
+      // Use provided name or generate one
+      const walletName = name?.trim() ? name : generateWalletName("Generated");
+      
       const wallet: Wallet = {
         id: Date.now().toString(),
-        name,
+        name: walletName,
         address: newWallet.address,
         encryptedPrivateKey,
       };
@@ -244,7 +269,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
-  const importWallet = async (name: string, privateKey: string): Promise<Wallet | null> => {
+  const importWallet = async (name: string | undefined, privateKey: string): Promise<Wallet | null> => {
     if (!masterPassword) {
       message.error("Master password not set");
       return null;
@@ -256,9 +281,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         (result: { address: string }) => result.address
       );
       
+      // Use provided name or generate one
+      const walletName = name?.trim() ? name : generateWalletName("Imported");
+      
       const wallet: Wallet = {
         id: Date.now().toString(),
-        name,
+        name: walletName,
         address,
         encryptedPrivateKey,
       };
@@ -303,7 +331,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         // Create a wallet object
         const wallet: Wallet = {
           id: Date.now().toString() + results.success, // Ensure unique ID
-          name: `Imported Wallet ${results.success + 1}`, // Auto-generate name
+          name: generateWalletName("Imported"), // Auto-generate name
           address: walletData.address,
           encryptedPrivateKey,
         };

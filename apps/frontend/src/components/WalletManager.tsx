@@ -110,14 +110,14 @@ const WalletManager: React.FC = () => {
   };
 
   // Handle creating a new wallet
-  const handleCreateWallet = async (values: { name: string }) => {
+  const handleCreateWallet = async (values: { name?: string }) => {
     await addWallet(values.name);
     setIsCreateModalVisible(false);
     createForm.resetFields();
   };
 
   // Handle importing an existing wallet
-  const handleImportWallet = async (values: { name: string; privateKey: string }) => {
+  const handleImportWallet = async (values: { name?: string; privateKey: string }) => {
     const inputType = detectWalletInputType(values.privateKey);
     
     if (!inputType) {
@@ -304,10 +304,10 @@ const WalletManager: React.FC = () => {
         <Form form={createForm} onFinish={handleCreateWallet} layout="vertical">
           <Form.Item
             name="name"
-            label="Wallet Name"
-            rules={[{ required: true, message: "Please enter a name for this wallet" }]}
+            label="Wallet Name (optional)"
+            rules={[{ required: false }]}
           >
-            <Input placeholder="Enter a name for this wallet" />
+            <Input placeholder="Enter a name or leave empty for auto-generated name" />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
@@ -327,10 +327,10 @@ const WalletManager: React.FC = () => {
         <Form form={importForm} onFinish={handleImportWallet} layout="vertical">
           <Form.Item
             name="name"
-            label="Wallet Name"
-            rules={[{ required: true, message: "Please enter a name for this wallet" }]}
+            label="Wallet Name (optional)"
+            rules={[{ required: false }]}
           >
-            <Input placeholder="Enter a name for this wallet" />
+            <Input placeholder="Enter a name or leave empty for auto-generated name" />
           </Form.Item>
           <Form.Item
             name="privateKey"

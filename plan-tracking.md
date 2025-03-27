@@ -64,6 +64,10 @@ Building a service that manages wallets for users and enables bulk actions for m
   - Added bulk import from text file with multiple private keys or mnemonic phrases
   - Implemented automatic detection of private keys vs mnemonic phrases
   - Added support for default derivation path for mnemonic phrases
+- [x] Made wallet name optional for create and import operations:
+  - Added auto-generation of wallet names (e.g., "Generated Wallet #1", "Imported Wallet #2")
+  - Updated UI to indicate name field is optional
+  - Maintained sequential numbering for auto-generated names
 - [ ] Add transaction history tracking
 - [ ] Implement address book functionality
 - [ ] Add support for hardware wallets
