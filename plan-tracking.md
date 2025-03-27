@@ -74,6 +74,12 @@ Building a service that manages wallets for users and enables bulk actions for m
   - Updated UI to display balance results in a table
   - Customized form fields to hide irrelevant inputs for balance check operation
   - Added dynamic result columns based on operation type
+- [x] Added CSV export functionality for operation results:
+  - Implemented CSV conversion utility for bulk operation results
+  - Added export button with download functionality
+  - Created dynamic headers based on operation type
+  - Included proper CSV formatting with quotes and escaping
+  - Generated filename based on operation type and date
 - [ ] Add transaction history tracking
 - [ ] Implement address book functionality
 - [ ] Add support for hardware wallets

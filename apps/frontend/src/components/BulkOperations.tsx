@@ -20,6 +20,7 @@ import {
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   LoadingOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import { useWallet } from "@/utils/WalletContext";
 import {
@@ -63,7 +64,71 @@ const BulkOperations: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [results, setResults] = useState<BulkOperationResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
-  // Removed unused state variables
+  
+  // Function to convert results to CSV format
+  const convertToCSV = (data: BulkOperationResult[]): string => {
+    if (data.length === 0) return "";
+    
+    // Determine headers based on operation type
+    const isBalanceCheck = operationType === OperationType.CHECK_NATIVE_BALANCE;
+    
+    // Define headers based on operation type
+    const headers = ["Wallet Address", "Status"];
+    
+    if (isBalanceCheck) {
+      headers.push("Balance");
+    } else {
+      headers.push("Transaction Hash");
+    }
+    
+    headers.push("Error");
+    
+    // Create CSV header row
+    let csv = headers.join(",") + "\n";
+    
+    // Add data rows
+    data.forEach(item => {
+      const status = item.success ? "Success" : "Failed";
+      const row = [
+        `"${item.walletAddress}"`, // Wrap in quotes to handle addresses with commas
+        status
+      ];
+      
+      if (isBalanceCheck) {
+        row.push(item.balance ? `${item.balance}` : "");
+      } else {
+        row.push(item.txHash ? `"${item.txHash}"` : "");
+      }
+      
+      row.push(item.error ? `"${item.error.replace(/"/g, '""')}"` : ""); // Escape quotes in error messages
+      
+      csv += row.join(",") + "\n";
+    });
+    
+    return csv;
+  };
+  
+  // Handle export to CSV
+  const handleExportCSV = () => {
+    if (results.length === 0) return;
+    
+    const csv = convertToCSV(results);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    
+    // Create a link and trigger download
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    
+    // Create filename based on operation type and date
+    const date = new Date().toISOString().split("T")[0];
+    const opType = operationType.replace("_", "-");
+    link.setAttribute("download", `${opType}-results-${date}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   
   // Initialize form with default values after component mounts (client-side only)
   useEffect(() => {
@@ -582,7 +647,17 @@ const BulkOperations: React.FC = () => {
             {showResults && (
               <>
                 <Divider />
-                <Title level={5}>3. Operation Results</Title>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <Title level={5} style={{ margin: 0 }}>3. Operation Results</Title>
+                  <Button 
+                    type="primary" 
+                    icon={<DownloadOutlined />} 
+                    onClick={handleExportCSV}
+                    disabled={results.length === 0}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
                 <Table
                   columns={getResultColumns()}
                   dataSource={results.map((result, index) => ({ ...result, key: index }))}
