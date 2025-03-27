@@ -59,6 +59,11 @@ Building a service that manages wallets for users and enables bulk actions for m
   - Implemented fallback mechanisms (localStorage + sessionStorage)
   - Added robust error handling for storage operations
   - Eliminated duplicate storage entries
+- [x] Enhanced wallet import functionality:
+  - Added bulk import from text box with multiple private keys or mnemonic phrases
+  - Added bulk import from text file with multiple private keys or mnemonic phrases
+  - Implemented automatic detection of private keys vs mnemonic phrases
+  - Added support for default derivation path for mnemonic phrases
 - [ ] Add transaction history tracking
 - [ ] Implement address book functionality
 - [ ] Add support for hardware wallets

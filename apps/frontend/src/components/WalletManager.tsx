@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Card,
   Button,
@@ -11,6 +11,8 @@ import {
   Tooltip,
   message,
   Checkbox,
+  Tabs,
+  Spin,
 } from "antd";
 import {
   PlusOutlined,
@@ -20,9 +22,11 @@ import {
   CopyOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
+  UploadOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import { useWallet, Wallet } from "@/utils/WalletContext";
-import { isValidPrivateKey } from "@/utils/walletUtils";
+import { detectWalletInputType, createWalletFromInput } from "@/utils/walletUtils";
 
 const { Text, Paragraph } = Typography;
 
@@ -33,6 +37,7 @@ const WalletManager: React.FC = () => {
     setMasterPassword,
     addWallet,
     importWallet,
+    bulkImportWallets,
     removeWallet,
     getDecryptedWallet,
     isPasswordSet,
@@ -47,14 +52,20 @@ const WalletManager: React.FC = () => {
   }, [isPasswordSet]);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState<boolean>(false);
   const [isImportModalVisible, setIsImportModalVisible] = useState<boolean>(false);
+  const [isBulkImportModalVisible, setIsBulkImportModalVisible] = useState<boolean>(false);
   const [isViewPrivateKeyModalVisible, setIsViewPrivateKeyModalVisible] = useState<boolean>(false);
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
   const [privateKey, setPrivateKey] = useState<string>("");
   const [showPrivateKey, setShowPrivateKey] = useState<boolean>(false);
   const [recommendPassword, setRecommendPassword] = useState<boolean>(false);
+  const [bulkImportLoading, setBulkImportLoading] = useState<boolean>(false);
+  const [activeImportTab, setActiveImportTab] = useState<string>("textbox");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [passwordForm] = Form.useForm();
   const [createForm] = Form.useForm();
   const [importForm] = Form.useForm();
+  const [bulkImportForm] = Form.useForm();
 
   // Generate a strong random password
   const generateStrongPassword = (): string => {
@@ -107,14 +118,27 @@ const WalletManager: React.FC = () => {
 
   // Handle importing an existing wallet
   const handleImportWallet = async (values: { name: string; privateKey: string }) => {
-    if (!isValidPrivateKey(values.privateKey)) {
-      message.error("Invalid private key format");
+    const inputType = detectWalletInputType(values.privateKey);
+    
+    if (!inputType) {
+      message.error("Invalid input: not a valid private key or mnemonic phrase");
       return;
     }
-
-    await importWallet(values.name, values.privateKey);
-    setIsImportModalVisible(false);
-    importForm.resetFields();
+    
+    try {
+      // Use the utility function to create a wallet from the input
+      const walletData = createWalletFromInput(values.privateKey);
+      
+      // Import the wallet using the private key
+      await importWallet(values.name, walletData.privateKey);
+      
+      message.success(`Wallet imported successfully from ${inputType}`);
+      setIsImportModalVisible(false);
+      importForm.resetFields();
+    } catch (error) {
+      console.error("Failed to import wallet:", error);
+      message.error("Failed to import wallet");
+    }
   };
 
   // Handle viewing a wallet's private key
@@ -141,6 +165,77 @@ const WalletManager: React.FC = () => {
       );
     } else {
       message.error("Clipboard API not available");
+    }
+  };
+
+  // Handle bulk import from text input
+  const handleBulkImportFromText = async (values: { walletInputs: string }) => {
+    if (!masterPassword) {
+      message.error("Master password not set");
+      return;
+    }
+
+    const lines = values.walletInputs.split("\n").filter(line => line.trim() !== "");
+    
+    if (lines.length === 0) {
+      message.error("No valid inputs found");
+      return;
+    }
+
+    setBulkImportLoading(true);
+    
+    try {
+      const result = await bulkImportWallets(lines);
+      
+      if (result.success > 0) {
+        setIsBulkImportModalVisible(false);
+        bulkImportForm.resetFields();
+      }
+    } catch (error) {
+      console.error("Bulk import error:", error);
+      message.error("Failed to import wallets");
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
+  // Handle file selection for bulk import
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!masterPassword) {
+      message.error("Master password not set");
+      return;
+    }
+
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setBulkImportLoading(true);
+    
+    try {
+      const text = await file.text();
+      const lines = text.split("\n").filter(line => line.trim() !== "");
+      
+      if (lines.length === 0) {
+        message.error("No valid inputs found in file");
+        return;
+      }
+
+      const result = await bulkImportWallets(lines);
+      
+      if (result.success > 0) {
+        setIsBulkImportModalVisible(false);
+        // Reset the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    } catch (error) {
+      console.error("File import error:", error);
+      message.error("Failed to import wallets from file");
+    } finally {
+      setBulkImportLoading(false);
     }
   };
 
@@ -239,10 +334,10 @@ const WalletManager: React.FC = () => {
           </Form.Item>
           <Form.Item
             name="privateKey"
-            label="Private Key"
-            rules={[{ required: true, message: "Please enter the private key" }]}
+            label="Private Key or Mnemonic Phrase"
+            rules={[{ required: true, message: "Please enter a private key or mnemonic phrase" }]}
           >
-            <Input.Password placeholder="Enter the private key" />
+            <Input.Password placeholder="Enter a private key or mnemonic phrase" />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
@@ -315,6 +410,99 @@ const WalletManager: React.FC = () => {
         </Space>
       </Modal>
 
+      {/* Bulk Import Modal */}
+      <Modal
+        title="Bulk Import Wallets"
+        open={isBulkImportModalVisible}
+        onCancel={() => {
+          setIsBulkImportModalVisible(false);
+          bulkImportForm.resetFields();
+          setActiveImportTab("textbox");
+        }}
+        footer={null}
+        width={600}
+      >
+        <Paragraph>
+          Import multiple wallets at once by providing a list of private keys or mnemonic phrases.
+          Each line will be treated as a separate wallet.
+        </Paragraph>
+        
+        <Tabs
+          activeKey={activeImportTab}
+          onChange={(key) => setActiveImportTab(key)}
+          items={[
+            {
+              key: "textbox",
+              label: (
+                <span>
+                  <FileTextOutlined /> From Text
+                </span>
+              ),
+              children: (
+                <Form form={bulkImportForm} layout="vertical" onFinish={handleBulkImportFromText}>
+                  <Form.Item
+                    name="walletInputs"
+                    rules={[{ required: true, message: "Please enter private keys or mnemonic phrases" }]}
+                  >
+                    <Input.TextArea
+                      placeholder="Enter one private key or mnemonic phrase per line"
+                      rows={10}
+                      style={{ fontFamily: "monospace" }}
+                    />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button 
+                      type="primary" 
+                      htmlType="submit" 
+                      loading={bulkImportLoading}
+                      block
+                    >
+                      Import Wallets
+                    </Button>
+                  </Form.Item>
+                </Form>
+              ),
+            },
+            {
+              key: "file",
+              label: (
+                <span>
+                  <UploadOutlined /> From File
+                </span>
+              ),
+              children: (
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: "none" }}
+                    accept=".txt"
+                    onChange={handleFileChange}
+                  />
+                  <Space direction="vertical" size="large">
+                    <Button 
+                      icon={<UploadOutlined />} 
+                      onClick={() => fileInputRef.current?.click()}
+                      size="large"
+                    >
+                      Select Text File
+                    </Button>
+                    <Text type="secondary">
+                      Select a text file containing one private key or mnemonic phrase per line
+                    </Text>
+                    {bulkImportLoading && (
+                      <div style={{ marginTop: 20 }}>
+                        <Spin tip="Importing wallets..." />
+                      </div>
+                    )}
+                  </Space>
+                </div>
+              ),
+            },
+          ]}
+        />
+      </Modal>
+
       {/* Main Content */}
       <Card
         title="Wallet Management"
@@ -352,6 +540,19 @@ const WalletManager: React.FC = () => {
               }}
             >
               Import Wallet
+            </Button>
+            <Button
+              icon={<FileTextOutlined />}
+              onClick={() => {
+                if (!masterPassword) {
+                  message.error("Please set a master password first");
+                  setIsPasswordModalVisible(true);
+                  return;
+                }
+                setIsBulkImportModalVisible(true);
+              }}
+            >
+              Bulk Import
             </Button>
           </Space>
         }

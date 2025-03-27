@@ -1,5 +1,10 @@
-import { Wallet } from "ethers";
+import { Wallet, HDNodeWallet } from "ethers";
 import CryptoJS from "crypto-js";
+
+/**
+ * Default derivation path for Ethereum wallets
+ */
+export const DEFAULT_DERIVATION_PATH = "m/44'/60'/0'/0/0";
 
 /**
  * Generates a new Ethereum wallet
@@ -73,4 +78,88 @@ export function isValidPrivateKey(privateKey: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Validates if a string is a valid mnemonic phrase
+ * @param mnemonic The mnemonic phrase to validate
+ * @returns Boolean indicating if the mnemonic phrase is valid
+ */
+export function isValidMnemonic(mnemonic: string): boolean {
+  try {
+    // Check if the mnemonic has 12, 15, 18, 21, or 24 words
+    const words = mnemonic.trim().split(/\s+/);
+    if (![12, 15, 18, 21, 24].includes(words.length)) {
+      return false;
+    }
+    
+    // Try to create a wallet with this mnemonic
+    Wallet.fromPhrase(mnemonic);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detects if a string is a private key or mnemonic phrase
+ * @param input The input string to check
+ * @returns "privateKey", "mnemonic", or null if invalid
+ */
+export function detectWalletInputType(input: string): "privateKey" | "mnemonic" | null {
+  if (isValidPrivateKey(input)) {
+    return "privateKey";
+  }
+  
+  if (isValidMnemonic(input)) {
+    return "mnemonic";
+  }
+  
+  return null;
+}
+
+/**
+ * Creates a wallet from a private key or mnemonic phrase
+ * @param input The private key or mnemonic phrase
+ * @param derivationPath Optional derivation path for mnemonic (defaults to m/44'/60'/0'/0/0)
+ * @returns Object containing the wallet's address and private key
+ */
+export function createWalletFromInput(
+  input: string,
+  derivationPath: string = DEFAULT_DERIVATION_PATH
+): { address: string; privateKey: string } {
+  const inputType = detectWalletInputType(input);
+  
+  if (!inputType) {
+    throw new Error("Invalid input: not a valid private key or mnemonic phrase");
+  }
+  
+  let wallet: Wallet | HDNodeWallet;
+  
+  if (inputType === "privateKey") {
+    // Ensure the private key has the 0x prefix
+    const formattedKey = input.startsWith("0x") ? input : `0x${input}`;
+    wallet = new Wallet(formattedKey);
+  } else {
+    // Create wallet from mnemonic
+    // In ethers v6, we need to use HDNodeWallet.fromPhrase
+    wallet = HDNodeWallet.fromPhrase(input);
+    
+    // If a derivation path is provided and it's not the default one that's already used
+    // by HDNodeWallet.fromPhrase, we need to derive it
+    if (derivationPath && derivationPath !== "m/44'/60'/0'/0/0") {
+      try {
+        // Try to derive the custom path
+        wallet = wallet.derivePath(derivationPath);
+      } catch (derivationError) {
+        console.error("Failed to use custom derivation path:", derivationError);
+        // We already have a wallet from the default path, so just continue
+      }
+    }
+  }
+  
+  return {
+    address: wallet.address,
+    privateKey: wallet.privateKey,
+  };
 }

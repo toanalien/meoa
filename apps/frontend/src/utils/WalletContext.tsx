@@ -16,6 +16,7 @@ interface WalletContextType {
   setMasterPassword: (password: string) => void;
   addWallet: (name: string) => Promise<Wallet | null>;
   importWallet: (name: string, privateKey: string) => Promise<Wallet | null>;
+  bulkImportWallets: (inputs: string[]) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
   removeWallet: (id: string) => void;
   getDecryptedWallet: (id: string) => Promise<{ privateKey: string; address: string } | null>;
   isPasswordSet: boolean;
@@ -274,6 +275,63 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
+  const bulkImportWallets = async (inputs: string[]): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
+    if (!masterPassword) {
+      message.error("Master password not set");
+      return { success: 0, failed: inputs.length, wallets: [] };
+    }
+
+    const results = {
+      success: 0,
+      failed: 0,
+      wallets: [] as Wallet[],
+    };
+
+    // Process each input line
+    for (const input of inputs) {
+      const trimmedInput = input.trim();
+      if (!trimmedInput) continue; // Skip empty lines
+
+      try {
+        // Import the wallet using the utility function
+        const { createWalletFromInput } = await import("@/utils/walletUtils");
+        const walletData = createWalletFromInput(trimmedInput);
+        
+        // Encrypt the private key
+        const encryptedPrivateKey = await encryptWallet(walletData.privateKey, masterPassword);
+        
+        // Create a wallet object
+        const wallet: Wallet = {
+          id: Date.now().toString() + results.success, // Ensure unique ID
+          name: `Imported Wallet ${results.success + 1}`, // Auto-generate name
+          address: walletData.address,
+          encryptedPrivateKey,
+        };
+        
+        results.wallets.push(wallet);
+        results.success++;
+      } catch (error) {
+        console.error("Failed to import wallet:", error);
+        results.failed++;
+      }
+    }
+
+    if (results.wallets.length > 0) {
+      const updatedWallets = [...wallets, ...results.wallets];
+      setWallets(updatedWallets);
+      saveWalletsToLocalStorage(updatedWallets);
+      message.success(`Successfully imported ${results.success} wallet(s)`);
+      
+      if (results.failed > 0) {
+        message.warning(`Failed to import ${results.failed} wallet(s)`);
+      }
+    } else if (results.failed > 0) {
+      message.error(`Failed to import all ${results.failed} wallet(s)`);
+    }
+
+    return results;
+  };
+
   const removeWallet = (id: string) => {
     const updatedWallets = wallets.filter((wallet) => wallet.id !== id);
     setWallets(updatedWallets);
@@ -309,6 +367,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     setMasterPassword,
     addWallet,
     importWallet,
+    bulkImportWallets,
     removeWallet,
     getDecryptedWallet,
     isPasswordSet,
