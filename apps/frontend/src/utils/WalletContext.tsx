@@ -22,6 +22,7 @@ interface WalletContextType {
   importWallet: (name: string | undefined, privateKey: string) => Promise<Wallet | null>;
   importWatchOnlyWallet: (name: string | undefined, address: string) => Promise<Wallet | null>;
   bulkImportWallets: (inputs: string[], onProgress?: ProgressCallback) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
+  bulkImportWatchOnlyWallets: (addresses: string[], onProgress?: ProgressCallback) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
   removeWallet: (id: string) => void;
   getDecryptedWallet: (id: string) => Promise<{ privateKey: string; address: string } | null>;
   isPasswordSet: boolean;
@@ -439,6 +440,68 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
+  const bulkImportWatchOnlyWallets = async (addresses: string[], onProgress?: ProgressCallback): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
+    const results = {
+      success: 0,
+      failed: 0,
+      wallets: [] as Wallet[],
+    };
+
+    const total = addresses.length;
+
+    // Process each address
+    for (let i = 0; i < addresses.length; i++) {
+      const address = addresses[i].trim();
+      
+      // Update progress
+      if (onProgress) {
+        onProgress(i + 1, total);
+      }
+      
+      if (!address) continue; // Skip empty lines
+
+      try {
+        // Validate the address format (basic check for Ethereum address)
+        if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
+          throw new Error("Invalid Ethereum address format");
+        }
+        
+        // Generate a wallet name
+        const walletName = "Watch-Only Wallet #" + (wallets.filter(w => w.name.startsWith("Watch-Only Wallet #")).length + results.success + 1);
+        
+        // Create a wallet object
+        const wallet: Wallet = {
+          id: Date.now().toString() + results.success, // Ensure unique ID
+          name: walletName,
+          address,
+          encryptedPrivateKey: "", // Empty for watch-only wallets
+          isWatchOnly: true,
+        };
+        
+        results.wallets.push(wallet);
+        results.success++;
+      } catch (error) {
+        console.error("Failed to import watch-only wallet:", error);
+        results.failed++;
+      }
+    }
+
+    if (results.wallets.length > 0) {
+      const updatedWallets = [...wallets, ...results.wallets];
+      setWallets(updatedWallets);
+      saveWalletsToLocalStorage(updatedWallets);
+      message.success(`Successfully imported ${results.success} watch-only wallet(s)`);
+      
+      if (results.failed > 0) {
+        message.warning(`Failed to import ${results.failed} address(es)`);
+      }
+    } else if (results.failed > 0) {
+      message.error(`Failed to import all ${results.failed} address(es)`);
+    }
+
+    return results;
+  };
+
   const value = {
     wallets,
     masterPassword,
@@ -447,6 +510,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     importWallet,
     importWatchOnlyWallet,
     bulkImportWallets,
+    bulkImportWatchOnlyWallets,
     removeWallet,
     getDecryptedWallet,
     isPasswordSet,

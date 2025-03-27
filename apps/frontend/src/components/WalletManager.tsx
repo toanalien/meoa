@@ -39,6 +39,7 @@ const WalletManager: React.FC = () => {
     importWallet,
     importWatchOnlyWallet,
     bulkImportWallets,
+    bulkImportWatchOnlyWallets,
     removeWallet,
     getDecryptedWallet,
     isPasswordSet,
@@ -55,6 +56,7 @@ const WalletManager: React.FC = () => {
   const [isImportModalVisible, setIsImportModalVisible] = useState<boolean>(false);
   const [isWatchOnlyModalVisible, setIsWatchOnlyModalVisible] = useState<boolean>(false);
   const [isBulkImportModalVisible, setIsBulkImportModalVisible] = useState<boolean>(false);
+  const [isBulkWatchOnlyModalVisible, setIsBulkWatchOnlyModalVisible] = useState<boolean>(false);
   const [isViewPrivateKeyModalVisible, setIsViewPrivateKeyModalVisible] = useState<boolean>(false);
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
   const [privateKey, setPrivateKey] = useState<string>("");
@@ -63,6 +65,7 @@ const WalletManager: React.FC = () => {
   const [bulkImportLoading, setBulkImportLoading] = useState<boolean>(false);
   const [activeImportTab, setActiveImportTab] = useState<string>("textbox");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const watchOnlyFileInputRef = useRef<HTMLInputElement>(null);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   
   const [passwordForm] = Form.useForm();
@@ -70,6 +73,7 @@ const WalletManager: React.FC = () => {
   const [importForm] = Form.useForm();
   const [watchOnlyForm] = Form.useForm();
   const [bulkImportForm] = Form.useForm();
+  const [bulkWatchOnlyForm] = Form.useForm();
 
   // Generate a strong random password
   const generateStrongPassword = (): string => {
@@ -217,6 +221,75 @@ const WalletManager: React.FC = () => {
     } catch (error) {
       console.error("Bulk import error:", error);
       message.error("Failed to import wallets");
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
+  // Handle bulk import of watch-only wallets from text input
+  const handleBulkWatchOnlyImport = async (values: { addressInputs: string }) => {
+    const lines = values.addressInputs.split("\n").filter(line => line.trim() !== "");
+    
+    if (lines.length === 0) {
+      message.error("No valid addresses found");
+      return;
+    }
+
+    setBulkImportLoading(true);
+    setImportProgress(null);
+    
+    try {
+      const result = await bulkImportWatchOnlyWallets(
+        lines,
+        (current, total) => setImportProgress({ current, total })
+      );
+      
+      if (result.success > 0) {
+        setIsBulkWatchOnlyModalVisible(false);
+        bulkWatchOnlyForm.resetFields();
+      }
+    } catch (error) {
+      console.error("Bulk watch-only import error:", error);
+      message.error("Failed to import watch-only wallets");
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
+  // Handle file selection for watch-only wallet import
+  const handleWatchOnlyFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setBulkImportLoading(true);
+    setImportProgress(null);
+    
+    try {
+      const text = await file.text();
+      const lines = text.split("\n").filter(line => line.trim() !== "");
+      
+      if (lines.length === 0) {
+        message.error("No valid addresses found in file");
+        return;
+      }
+
+      const result = await bulkImportWatchOnlyWallets(
+        lines,
+        (current, total) => setImportProgress({ current, total })
+      );
+      
+      if (result.success > 0) {
+        setIsBulkWatchOnlyModalVisible(false);
+        // Reset the file input
+        if (watchOnlyFileInputRef.current) {
+          watchOnlyFileInputRef.current.value = "";
+        }
+      }
+    } catch (error) {
+      console.error("File import error for watch-only wallets:", error);
+      message.error("Failed to import watch-only wallets from file");
     } finally {
       setBulkImportLoading(false);
     }
@@ -534,6 +607,103 @@ const WalletManager: React.FC = () => {
         />
       </Modal>
 
+      {/* Bulk Watch-Only Import Modal */}
+      <Modal
+        title="Bulk Import Watch-Only Wallets"
+        open={isBulkWatchOnlyModalVisible}
+        onCancel={() => {
+          setIsBulkWatchOnlyModalVisible(false);
+          bulkWatchOnlyForm.resetFields();
+          setActiveImportTab("textbox");
+        }}
+        footer={null}
+        width={600}
+      >
+        <Paragraph>
+          Import multiple watch-only wallets at once by providing a list of Ethereum addresses.
+          Each line will be treated as a separate watch-only wallet.
+        </Paragraph>
+        
+        <Tabs
+          activeKey={activeImportTab}
+          onChange={(key) => setActiveImportTab(key)}
+          items={[
+            {
+              key: "textbox",
+              label: (
+                <span>
+                  <FileTextOutlined /> From Text
+                </span>
+              ),
+              children: (
+                <Form form={bulkWatchOnlyForm} layout="vertical" onFinish={handleBulkWatchOnlyImport}>
+                  <Form.Item
+                    name="addressInputs"
+                    rules={[{ required: true, message: "Please enter Ethereum addresses" }]}
+                  >
+                    <Input.TextArea
+                      placeholder="Enter one Ethereum address per line (0x...)"
+                      rows={10}
+                      style={{ fontFamily: "monospace" }}
+                    />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button 
+                      type="primary" 
+                      htmlType="submit" 
+                      loading={bulkImportLoading}
+                      block
+                    >
+                      Import Watch-Only Wallets
+                    </Button>
+                  </Form.Item>
+                </Form>
+              ),
+            },
+            {
+              key: "file",
+              label: (
+                <span>
+                  <UploadOutlined /> From File
+                </span>
+              ),
+              children: (
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <input
+                    type="file"
+                    ref={watchOnlyFileInputRef}
+                    style={{ display: "none" }}
+                    accept=".txt"
+                    onChange={handleWatchOnlyFileChange}
+                  />
+                  <Space direction="vertical" size="large">
+                    <Button 
+                      icon={<UploadOutlined />} 
+                      onClick={() => watchOnlyFileInputRef.current?.click()}
+                      size="large"
+                    >
+                      Select Text File
+                    </Button>
+                    <Text type="secondary">
+                      Select a text file containing one Ethereum address per line
+                    </Text>
+                    {bulkImportLoading && (
+                      <div style={{ marginTop: 20 }}>
+                        <Spin tip={
+                          importProgress 
+                            ? `Importing watch-only wallets... ${importProgress.current}/${importProgress.total}`
+                            : "Importing watch-only wallets..."
+                        } />
+                      </div>
+                    )}
+                  </Space>
+                </div>
+              ),
+            },
+          ]}
+        />
+      </Modal>
+
       {/* Watch-Only Wallet Modal */}
       <Modal
         title="Import Watch-Only Wallet"
@@ -619,6 +789,14 @@ const WalletManager: React.FC = () => {
               }}
             >
               Watch Address
+            </Button>
+            <Button
+              icon={<EyeOutlined />}
+              onClick={() => {
+                setIsBulkWatchOnlyModalVisible(true);
+              }}
+            >
+              Bulk Watch
             </Button>
             <Button
               icon={<FileTextOutlined />}
