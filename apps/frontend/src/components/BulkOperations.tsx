@@ -30,6 +30,7 @@ import {
   bulkApproveToken,
   bulkCustomTransaction,
   bulkCheckNativeBalance,
+  getExplorerUrl,
   TransactionParams,
   BulkOperationResult,
 } from "@/utils/blockchainUtils";
@@ -379,11 +380,23 @@ const BulkOperations: React.FC = () => {
         title: "Wallet Address",
         dataIndex: "walletAddress",
         key: "walletAddress",
-        render: (text: string) => (
-          <Text style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
-            {text}
-          </Text>
-        ),
+        render: (text: string) => {
+          const rpcUrl = form.getFieldValue("rpcUrl");
+          const explorerUrl = getExplorerUrl(rpcUrl, text);
+          
+          return (
+            <a 
+              href={explorerUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ fontSize: "0.85rem" }}
+            >
+              <Text ellipsis={{ tooltip: text }}>
+                {text}
+              </Text>
+            </a>
+          );
+        },
       },
       {
         title: "Status",
@@ -418,11 +431,41 @@ const BulkOperations: React.FC = () => {
         title: "Transaction Hash",
         dataIndex: "txHash",
         key: "txHash",
-        render: (text: string) => (
-          <Text style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
-            {text || "-"}
-          </Text>
-        ),
+        render: (text: string) => {
+          if (!text) return <Text>-</Text>;
+          
+          const rpcUrl = form.getFieldValue("rpcUrl");
+          let explorerUrl = "";
+          
+          // Determine which explorer to use based on the RPC URL
+          if (rpcUrl.includes("binance") || rpcUrl.includes("bsc")) {
+            explorerUrl = `https://bscscan.com/tx/${text}`;
+          } else if (rpcUrl.includes("polygon")) {
+            explorerUrl = `https://polygonscan.com/tx/${text}`;
+          } else if (rpcUrl.includes("arbitrum")) {
+            explorerUrl = `https://arbiscan.io/tx/${text}`;
+          } else if (rpcUrl.includes("optimism")) {
+            explorerUrl = `https://optimistic.etherscan.io/tx/${text}`;
+          } else if (rpcUrl.includes("sepolia")) {
+            explorerUrl = `https://sepolia.etherscan.io/tx/${text}`;
+          } else {
+            // Default to Etherscan for Ethereum and unknown networks
+            explorerUrl = `https://etherscan.io/tx/${text}`;
+          }
+          
+          return (
+            <a 
+              href={explorerUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ fontSize: "0.85rem" }}
+            >
+              <Text ellipsis={{ tooltip: text }}>
+                {text}
+              </Text>
+            </a>
+          );
+        },
       });
     }
 
