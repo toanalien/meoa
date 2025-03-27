@@ -25,6 +25,7 @@ import {
   bulkTransferToken,
   bulkApproveToken,
   bulkCustomTransaction,
+  bulkCheckNativeBalance,
   TransactionParams,
   BulkOperationResult,
 } from "@/utils/blockchainUtils";
@@ -49,6 +50,7 @@ enum OperationType {
   TRANSFER_TOKEN = "transfer_token",
   APPROVE_TOKEN = "approve_token",
   CUSTOM = "custom",
+  CHECK_NATIVE_BALANCE = "check_native_balance",
 }
 
 const BulkOperations: React.FC = () => {
@@ -144,14 +146,18 @@ const BulkOperations: React.FC = () => {
               ? "Transfer Tokens"
               : operationType === OperationType.APPROVE_TOKEN
               ? "Approve Tokens"
+              : operationType === OperationType.CHECK_NATIVE_BALANCE
+              ? "Check Native Balance"
               : "Custom Transaction"}
           </Paragraph>
           <Paragraph>
             <Text strong>Network:</Text> {values.network === "custom" ? "Custom RPC" : values.network}
           </Paragraph>
-          <Paragraph>
-            <Text strong>To Address:</Text> {values.to}
-          </Paragraph>
+          {operationType !== OperationType.CHECK_NATIVE_BALANCE && (
+            <Paragraph>
+              <Text strong>To Address:</Text> {values.to}
+            </Paragraph>
+          )}
           {values.value && (
             <Paragraph>
               <Text strong>Value:</Text> {values.value}
@@ -209,6 +215,9 @@ const BulkOperations: React.FC = () => {
             case OperationType.CUSTOM:
               operationResults = await bulkCustomTransaction(privateKeys, params, values.rpcUrl);
               break;
+            case OperationType.CHECK_NATIVE_BALANCE:
+              operationResults = await bulkCheckNativeBalance(privateKeys, values.rpcUrl);
+              break;
           }
 
           setResults(operationResults);
@@ -244,60 +253,74 @@ const BulkOperations: React.FC = () => {
     },
   ];
 
-  // Table columns for operation results
-  const resultColumns = [
-    {
-      title: "Wallet Address",
-      dataIndex: "walletAddress",
-      key: "walletAddress",
-      render: (text: string) => (
-        <Text style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
-          {text}
-        </Text>
-      ),
-    },
-    {
-      title: "Status",
-      dataIndex: "success",
-      key: "success",
-      render: (success: boolean) =>
-        success ? (
-          <Tag color="success" icon={<CheckCircleOutlined />}>
-            Success
-          </Tag>
-        ) : (
-          <Tag color="error" icon={<ExclamationCircleOutlined />}>
-            Failed
-          </Tag>
-        ),
-    },
-    {
-      title: "Transaction Hash",
-      dataIndex: "txHash",
-      key: "txHash",
-      render: (text: string) =>
-        text ? (
+  // Get table columns for operation results based on operation type
+  const getResultColumns = () => {
+    const baseColumns = [
+      {
+        title: "Wallet Address",
+        dataIndex: "walletAddress",
+        key: "walletAddress",
+        render: (text: string) => (
           <Text style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
             {text}
           </Text>
-        ) : (
-          "-"
         ),
-    },
-    {
+      },
+      {
+        title: "Status",
+        dataIndex: "success",
+        key: "success",
+        render: (success: boolean) =>
+          success ? (
+            <Tag color="success" icon={<CheckCircleOutlined />}>
+              Success
+            </Tag>
+          ) : (
+            <Tag color="error" icon={<ExclamationCircleOutlined />}>
+              Failed
+            </Tag>
+          ),
+      },
+    ];
+
+    // Add balance column for native balance check operation
+    if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
+      baseColumns.push({
+        title: "Balance",
+        dataIndex: "balance",
+        key: "balance",
+        render: (text: string) => (
+          <Text>{text ? `${text} ETH` : "-"}</Text>
+        ),
+      });
+    } else {
+      // Add transaction hash column for transaction operations
+      baseColumns.push({
+        title: "Transaction Hash",
+        dataIndex: "txHash",
+        key: "txHash",
+        render: (text: string) => (
+          <Text style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
+            {text || "-"}
+          </Text>
+        ),
+      });
+    }
+
+    // Add error column for all operations
+    baseColumns.push({
       title: "Error",
       dataIndex: "error",
       key: "error",
-      render: (text: string) =>
-        text ? (
-          <Text type="danger" style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
-            {text}
-          </Text>
-        ) : (
-          "-"
-        ),
-    },
-  ];
+      render: (text: string) => (
+        <Text type="danger" style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
+          {text || "-"}
+        </Text>
+      ),
+    });
+
+    return baseColumns;
+  };
 
   return (
     <div>
@@ -358,6 +381,7 @@ const BulkOperations: React.FC = () => {
                   <Option value={OperationType.TRANSFER_TOKEN}>Transfer ERC20 Tokens</Option>
                   <Option value={OperationType.APPROVE_TOKEN}>Approve ERC20 Tokens</Option>
                   <Option value={OperationType.CUSTOM}>Custom Transaction</Option>
+                  <Option value={OperationType.CHECK_NATIVE_BALANCE}>Check Native Balance</Option>
                 </Select>
               </Form.Item>
 
@@ -384,13 +408,15 @@ const BulkOperations: React.FC = () => {
                 <Input placeholder="e.g., https://eth.llamarpc.com" />
               </Form.Item>
 
-              <Form.Item
-                name="to"
-                label="To Address"
-                rules={[{ required: true, message: "Please enter the recipient address" }]}
-              >
-                <Input placeholder="0x..." />
-              </Form.Item>
+              {operationType !== OperationType.CHECK_NATIVE_BALANCE && (
+                <Form.Item
+                  name="to"
+                  label="To Address"
+                  rules={[{ required: true, message: "Please enter the recipient address" }]}
+                >
+                  <Input placeholder="0x..." />
+                </Form.Item>
+              )}
 
               {(operationType === OperationType.SEND ||
                 operationType === OperationType.TRANSFER_TOKEN ||
@@ -453,7 +479,9 @@ const BulkOperations: React.FC = () => {
                   loading={loading}
                   disabled={selectedWallets.length === 0}
                 >
-                  Execute Operation
+                  {operationType === OperationType.CHECK_NATIVE_BALANCE
+                    ? "Check Balances"
+                    : "Execute Operation"}
                 </Button>
               </Form.Item>
             </Form>
@@ -470,7 +498,7 @@ const BulkOperations: React.FC = () => {
                 <Divider />
                 <Title level={5}>3. Operation Results</Title>
                 <Table
-                  columns={resultColumns}
+                  columns={getResultColumns()}
                   dataSource={results.map((result, index) => ({ ...result, key: index }))}
                   pagination={false}
                 />

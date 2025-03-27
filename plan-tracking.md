@@ -68,6 +68,12 @@ Building a service that manages wallets for users and enables bulk actions for m
   - Added auto-generation of wallet names (e.g., "Generated Wallet #1", "Imported Wallet #2")
   - Updated UI to indicate name field is optional
   - Maintained sequential numbering for auto-generated names
+- [x] Added native balance check in bulk operations:
+  - Implemented bulkCheckNativeBalance function in blockchainUtils.ts
+  - Added CHECK_NATIVE_BALANCE operation type to BulkOperations component
+  - Updated UI to display balance results in a table
+  - Customized form fields to hide irrelevant inputs for balance check operation
+  - Added dynamic result columns based on operation type
 - [ ] Add transaction history tracking
 - [ ] Implement address book functionality
 - [ ] Add support for hardware wallets

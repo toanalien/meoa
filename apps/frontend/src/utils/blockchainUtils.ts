@@ -26,6 +26,7 @@ export interface BulkOperationResult {
   success: boolean;
   txHash?: string;
   error?: string;
+  balance?: string; // Added for balance check operations
 }
 
 /**
@@ -266,4 +267,41 @@ export async function getTokenBalance(
   const balance = await tokenContract.balanceOf(address);
   
   return ethers.formatUnits(balance, decimals);
+}
+
+/**
+ * Checks native token balances for multiple wallets in bulk
+ * @param privateKeys Array of private keys
+ * @param rpcUrl The RPC URL for the network
+ * @returns Array of operation results with wallet addresses and balances
+ */
+export async function bulkCheckNativeBalance(
+  privateKeys: string[],
+  rpcUrl: string
+): Promise<BulkOperationResult[]> {
+  const provider = createProvider(rpcUrl);
+  const results: BulkOperationResult[] = [];
+
+  for (const privateKey of privateKeys) {
+    try {
+      const wallet = new Wallet(privateKey);
+      const address = wallet.address;
+      const balance = await provider.getBalance(address);
+      
+      results.push({
+        walletAddress: address,
+        success: true,
+        balance: ethers.formatEther(balance),
+      });
+    } catch (error) {
+      console.error(`Error checking balance for wallet:`, error);
+      results.push({
+        walletAddress: new Wallet(privateKey).address,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return results;
 }
