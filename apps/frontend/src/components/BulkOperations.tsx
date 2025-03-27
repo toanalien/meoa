@@ -82,6 +82,7 @@ const BulkOperations: React.FC = () => {
     
     if (isBalanceCheck) {
       headers.push("Balance");
+      headers.push("Txns");
     } else {
       headers.push("Transaction Hash");
     }
@@ -101,6 +102,7 @@ const BulkOperations: React.FC = () => {
       
       if (isBalanceCheck) {
         row.push(item.balance ? `${item.balance}` : "");
+        row.push(item.txCount !== undefined ? `${item.txCount}` : "");
       } else {
         row.push(item.txHash ? `"${item.txHash}"` : "");
       }
@@ -415,7 +417,7 @@ const BulkOperations: React.FC = () => {
       },
     ];
 
-    // Add balance column for native balance check operation
+    // Add balance and transaction count columns for native balance check operation
     if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
       baseColumns.push({
         title: "Balance",
@@ -423,6 +425,15 @@ const BulkOperations: React.FC = () => {
         key: "balance",
         render: (text: string) => (
           <Text>{text ? `${text} ETH` : "-"}</Text>
+        ),
+      });
+      
+      baseColumns.push({
+        title: "Txns",
+        dataIndex: "txCount",
+        key: "txCount",
+        render: (count: any) => (
+          <Text>{count !== undefined ? count : "-"}</Text>
         ),
       });
     } else {

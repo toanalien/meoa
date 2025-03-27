@@ -51,6 +51,7 @@ export interface BulkOperationResult {
   txHash?: string;
   error?: string;
   balance?: string; // Added for balance check operations
+  txCount?: number; // Transaction count for the wallet
 }
 
 // Progress callback type
@@ -333,11 +334,26 @@ export async function getTokenBalance(
 }
 
 /**
+ * Gets the transaction count for a wallet address
+ * @param address The wallet address
+ * @param rpcUrl The RPC URL for the network
+ * @returns The transaction count as a number
+ */
+export async function getTransactionCount(
+  address: string,
+  rpcUrl: string
+): Promise<number> {
+  const provider = createProvider(rpcUrl);
+  const txCount = await provider.getTransactionCount(address);
+  return txCount;
+}
+
+/**
  * Checks native token balances for multiple wallets in bulk
  * @param addresses Array of wallet addresses
  * @param rpcUrl The RPC URL for the network
  * @param onProgress Optional callback for progress updates
- * @returns Array of operation results with wallet addresses and balances
+ * @returns Array of operation results with wallet addresses, balances, and transaction counts
  */
 export async function bulkCheckNativeBalance(
   addresses: string[],
@@ -356,15 +372,20 @@ export async function bulkCheckNativeBalance(
       onProgress(i + 1, total);
     }
     try {
-      const balance = await provider.getBalance(address);
+      // Get balance and transaction count in parallel
+      const [balance, txCount] = await Promise.all([
+        provider.getBalance(address),
+        provider.getTransactionCount(address)
+      ]);
       
       results.push({
         walletAddress: address,
         success: true,
         balance: ethers.formatEther(balance),
+        txCount: txCount
       });
     } catch (error) {
-      console.error(`Error checking balance for wallet:`, error);
+      console.error(`Error checking wallet data:`, error);
       results.push({
         walletAddress: address,
         success: false,
