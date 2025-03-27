@@ -320,9 +320,11 @@ const WalletManager: React.FC = () => {
         maskClosable={isPasswordSet}
       >
         <Form form={passwordForm} onFinish={handleSetPassword} layout="vertical">
-          <Paragraph>
-            This password will be used to encrypt and decrypt your wallet private keys.
-            Make sure to remember it as it cannot be recovered.
+          <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
+            <strong>IMPORTANT DISCLAIMER:</strong> This password will be used to encrypt and decrypt your wallet private keys.
+            Make sure to remember it as it cannot be recovered. The author is not responsible for any loss of assets
+            or user input. By setting a password, you acknowledge that you are solely responsible for managing your
+            wallet security and private keys.
           </Paragraph>
           <Form.Item
             name="password"
@@ -365,6 +367,10 @@ const WalletManager: React.FC = () => {
         footer={null}
       >
         <Form form={createForm} onFinish={handleCreateWallet} layout="vertical">
+          <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
+            <strong>IMPORTANT DISCLAIMER:</strong> By creating a wallet, you acknowledge that the author is not responsible for any loss of assets
+            or user input. You are solely responsible for securing your wallet and private keys.
+          </Paragraph>
           <Form.Item
             name="name"
             label="Wallet Name (optional)"
@@ -424,10 +430,12 @@ const WalletManager: React.FC = () => {
         ]}
       >
         <Space direction="vertical" style={{ width: "100%" }}>
-          <Text type="warning">
-            Warning: Never share your private key with anyone. Anyone with your private key has full
-            control of your wallet.
-          </Text>
+          <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
+            <strong>IMPORTANT DISCLAIMER:</strong> Never share your private key with anyone. Anyone with your private key has full
+            control of your wallet. The author is not responsible for any loss of assets resulting from sharing or mishandling 
+            of private keys. By viewing and/or copying this private key, you acknowledge that you are solely responsible for 
+            its security.
+          </Paragraph>
           <div style={{ display: "flex", alignItems: "center" }}>
             <Input.Password
               value={privateKey}
@@ -468,9 +476,11 @@ const WalletManager: React.FC = () => {
         footer={null}
         width={600}
       >
-        <Paragraph>
-          Import multiple wallets at once by providing a list of private keys or mnemonic phrases.
-          Each line will be treated as a separate wallet.
+        <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
+          <strong>IMPORTANT DISCLAIMER:</strong> Import multiple wallets at once by providing a list of private keys or mnemonic phrases.
+          Each line will be treated as a separate wallet. The author is not responsible for any loss of assets
+          or user input. By importing wallets, you acknowledge that you are solely responsible for the security
+          of your private keys and wallet management.
         </Paragraph>
         
         <Tabs
@@ -565,9 +575,11 @@ const WalletManager: React.FC = () => {
         footer={null}
         width={600}
       >
-        <Paragraph>
-          Import multiple watch-only wallets at once by providing a list of Ethereum addresses.
-          Each line will be treated as a separate watch-only wallet.
+        <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
+          <strong>IMPORTANT DISCLAIMER:</strong> Import multiple watch-only wallets at once by providing a list of Ethereum addresses.
+          Each line will be treated as a separate watch-only wallet. The author is not responsible for any loss of assets
+          or user input. By importing watch-only wallets, you acknowledge that you are solely responsible for managing your
+          wallet addresses.
         </Paragraph>
         
         <Tabs
