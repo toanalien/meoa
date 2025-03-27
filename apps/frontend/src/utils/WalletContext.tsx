@@ -11,6 +11,9 @@ export interface Wallet {
   isWatchOnly?: boolean;
 }
 
+// Progress callback type
+export type ProgressCallback = (current: number, total: number) => void;
+
 interface WalletContextType {
   wallets: Wallet[];
   masterPassword: string | null;
@@ -18,7 +21,7 @@ interface WalletContextType {
   addWallet: (name?: string) => Promise<Wallet | null>;
   importWallet: (name: string | undefined, privateKey: string) => Promise<Wallet | null>;
   importWatchOnlyWallet: (name: string | undefined, address: string) => Promise<Wallet | null>;
-  bulkImportWallets: (inputs: string[]) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
+  bulkImportWallets: (inputs: string[], onProgress?: ProgressCallback) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
   removeWallet: (id: string) => void;
   getDecryptedWallet: (id: string) => Promise<{ privateKey: string; address: string } | null>;
   isPasswordSet: boolean;
@@ -305,7 +308,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
-  const bulkImportWallets = async (inputs: string[]): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
+  const bulkImportWallets = async (inputs: string[], onProgress?: ProgressCallback): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
     if (!masterPassword) {
       message.error("Master password not set");
       return { success: 0, failed: inputs.length, wallets: [] };
@@ -317,8 +320,16 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       wallets: [] as Wallet[],
     };
 
+    const total = inputs.length;
+
     // Process each input line
-    for (const input of inputs) {
+    for (let i = 0; i < inputs.length; i++) {
+      const input = inputs[i];
+      
+      // Update progress
+      if (onProgress) {
+        onProgress(i + 1, total);
+      }
       const trimmedInput = input.trim();
       if (!trimmedInput) continue; // Skip empty lines
 

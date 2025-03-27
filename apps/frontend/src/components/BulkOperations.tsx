@@ -64,6 +64,7 @@ const BulkOperations: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [results, setResults] = useState<BulkOperationResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   
   // Function to convert results to CSV format
   const convertToCSV = (data: BulkOperationResult[]): string => {
@@ -255,8 +256,15 @@ const BulkOperations: React.FC = () => {
               throw new Error("No valid wallet addresses found");
             }
 
-            // Check balances
-            const operationResults = await bulkCheckNativeBalance(addresses, values.rpcUrl);
+            // Reset progress
+            setProgress({ current: 0, total: addresses.length });
+
+            // Check balances with progress tracking
+            const operationResults = await bulkCheckNativeBalance(
+              addresses, 
+              values.rpcUrl,
+              (current, total) => setProgress({ current, total })
+            );
             setResults(operationResults);
             setShowResults(true);
             return;
@@ -292,21 +300,44 @@ const BulkOperations: React.FC = () => {
             data: values.data,
           };
 
-          // Execute the operation based on the selected type
+          // Reset progress
+          setProgress({ current: 0, total: privateKeys.length });
+
+          // Execute the operation based on the selected type with progress tracking
           let operationResults: BulkOperationResult[] = [];
           
           switch (operationType) {
             case OperationType.SEND:
-              operationResults = await bulkSend(privateKeys, params, values.rpcUrl);
+              operationResults = await bulkSend(
+                privateKeys, 
+                params, 
+                values.rpcUrl,
+                (current, total) => setProgress({ current, total })
+              );
               break;
             case OperationType.TRANSFER_TOKEN:
-              operationResults = await bulkTransferToken(privateKeys, params, values.rpcUrl);
+              operationResults = await bulkTransferToken(
+                privateKeys, 
+                params, 
+                values.rpcUrl,
+                (current, total) => setProgress({ current, total })
+              );
               break;
             case OperationType.APPROVE_TOKEN:
-              operationResults = await bulkApproveToken(privateKeys, params, values.rpcUrl);
+              operationResults = await bulkApproveToken(
+                privateKeys, 
+                params, 
+                values.rpcUrl,
+                (current, total) => setProgress({ current, total })
+              );
               break;
             case OperationType.CUSTOM:
-              operationResults = await bulkCustomTransaction(privateKeys, params, values.rpcUrl);
+              operationResults = await bulkCustomTransaction(
+                privateKeys, 
+                params, 
+                values.rpcUrl,
+                (current, total) => setProgress({ current, total })
+              );
               break;
           }
 
@@ -640,7 +671,11 @@ const BulkOperations: React.FC = () => {
             {loading && (
               <div style={{ textAlign: "center", margin: "20px 0" }}>
                 <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
-                <div style={{ marginTop: 8 }}>Processing transactions...</div>
+                <div style={{ marginTop: 8 }}>
+                  {progress 
+                    ? `Processing transactions... ${progress.current}/${progress.total} wallets`
+                    : "Processing transactions..."}
+                </div>
               </div>
             )}
 

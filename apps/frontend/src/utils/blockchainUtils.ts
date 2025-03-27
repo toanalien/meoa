@@ -29,6 +29,9 @@ export interface BulkOperationResult {
   balance?: string; // Added for balance check operations
 }
 
+// Progress callback type
+export type ProgressCallback = (current: number, total: number) => void;
+
 /**
  * Creates a provider for the specified network
  * @param rpcUrl The RPC URL for the network
@@ -43,17 +46,26 @@ export function createProvider(rpcUrl: string) {
  * @param privateKeys Array of private keys
  * @param params Transaction parameters
  * @param rpcUrl The RPC URL for the network
+ * @param onProgress Optional callback for progress updates
  * @returns Array of operation results
  */
 export async function bulkSend(
   privateKeys: string[],
   params: TransactionParams,
-  rpcUrl: string
+  rpcUrl: string,
+  onProgress?: ProgressCallback
 ): Promise<BulkOperationResult[]> {
   const provider = createProvider(rpcUrl);
   const results: BulkOperationResult[] = [];
+  const total = privateKeys.length;
 
-  for (const privateKey of privateKeys) {
+  for (let i = 0; i < privateKeys.length; i++) {
+    const privateKey = privateKeys[i];
+    
+    // Update progress
+    if (onProgress) {
+      onProgress(i + 1, total);
+    }
     try {
       const wallet = new Wallet(privateKey, provider);
       
@@ -87,12 +99,14 @@ export async function bulkSend(
  * @param privateKeys Array of private keys
  * @param params Transaction parameters including token address
  * @param rpcUrl The RPC URL for the network
+ * @param onProgress Optional callback for progress updates
  * @returns Array of operation results
  */
 export async function bulkTransferToken(
   privateKeys: string[],
   params: TransactionParams,
-  rpcUrl: string
+  rpcUrl: string,
+  onProgress?: ProgressCallback
 ): Promise<BulkOperationResult[]> {
   if (!params.tokenAddress) {
     throw new Error("Token address is required for token transfers");
@@ -100,8 +114,15 @@ export async function bulkTransferToken(
 
   const provider = createProvider(rpcUrl);
   const results: BulkOperationResult[] = [];
+  const total = privateKeys.length;
 
-  for (const privateKey of privateKeys) {
+  for (let i = 0; i < privateKeys.length; i++) {
+    const privateKey = privateKeys[i];
+    
+    // Update progress
+    if (onProgress) {
+      onProgress(i + 1, total);
+    }
     try {
       const wallet = new Wallet(privateKey, provider);
       const tokenContract = new Contract(params.tokenAddress, ERC20_ABI, wallet);
@@ -140,12 +161,14 @@ export async function bulkTransferToken(
  * @param privateKeys Array of private keys
  * @param params Transaction parameters including token address
  * @param rpcUrl The RPC URL for the network
+ * @param onProgress Optional callback for progress updates
  * @returns Array of operation results
  */
 export async function bulkApproveToken(
   privateKeys: string[],
   params: TransactionParams,
-  rpcUrl: string
+  rpcUrl: string,
+  onProgress?: ProgressCallback
 ): Promise<BulkOperationResult[]> {
   if (!params.tokenAddress) {
     throw new Error("Token address is required for token approvals");
@@ -153,8 +176,15 @@ export async function bulkApproveToken(
 
   const provider = createProvider(rpcUrl);
   const results: BulkOperationResult[] = [];
+  const total = privateKeys.length;
 
-  for (const privateKey of privateKeys) {
+  for (let i = 0; i < privateKeys.length; i++) {
+    const privateKey = privateKeys[i];
+    
+    // Update progress
+    if (onProgress) {
+      onProgress(i + 1, total);
+    }
     try {
       const wallet = new Wallet(privateKey, provider);
       const tokenContract = new Contract(params.tokenAddress, ERC20_ABI, wallet);
@@ -196,17 +226,26 @@ export async function bulkApproveToken(
  * @param privateKeys Array of private keys
  * @param params Transaction parameters including custom data
  * @param rpcUrl The RPC URL for the network
+ * @param onProgress Optional callback for progress updates
  * @returns Array of operation results
  */
 export async function bulkCustomTransaction(
   privateKeys: string[],
   params: TransactionParams,
-  rpcUrl: string
+  rpcUrl: string,
+  onProgress?: ProgressCallback
 ): Promise<BulkOperationResult[]> {
   const provider = createProvider(rpcUrl);
   const results: BulkOperationResult[] = [];
+  const total = privateKeys.length;
 
-  for (const privateKey of privateKeys) {
+  for (let i = 0; i < privateKeys.length; i++) {
+    const privateKey = privateKeys[i];
+    
+    // Update progress
+    if (onProgress) {
+      onProgress(i + 1, total);
+    }
     try {
       const wallet = new Wallet(privateKey, provider);
       
@@ -273,16 +312,25 @@ export async function getTokenBalance(
  * Checks native token balances for multiple wallets in bulk
  * @param addresses Array of wallet addresses
  * @param rpcUrl The RPC URL for the network
+ * @param onProgress Optional callback for progress updates
  * @returns Array of operation results with wallet addresses and balances
  */
 export async function bulkCheckNativeBalance(
   addresses: string[],
-  rpcUrl: string
+  rpcUrl: string,
+  onProgress?: ProgressCallback
 ): Promise<BulkOperationResult[]> {
   const provider = createProvider(rpcUrl);
   const results: BulkOperationResult[] = [];
+  const total = addresses.length;
 
-  for (const address of addresses) {
+  for (let i = 0; i < addresses.length; i++) {
+    const address = addresses[i];
+    
+    // Update progress
+    if (onProgress) {
+      onProgress(i + 1, total);
+    }
     try {
       const balance = await provider.getBalance(address);
       

@@ -63,6 +63,7 @@ const WalletManager: React.FC = () => {
   const [bulkImportLoading, setBulkImportLoading] = useState<boolean>(false);
   const [activeImportTab, setActiveImportTab] = useState<string>("textbox");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   
   const [passwordForm] = Form.useForm();
   const [createForm] = Form.useForm();
@@ -201,9 +202,13 @@ const WalletManager: React.FC = () => {
     }
 
     setBulkImportLoading(true);
+    setImportProgress(null);
     
     try {
-      const result = await bulkImportWallets(lines);
+      const result = await bulkImportWallets(
+        lines,
+        (current, total) => setImportProgress({ current, total })
+      );
       
       if (result.success > 0) {
         setIsBulkImportModalVisible(false);
@@ -230,6 +235,7 @@ const WalletManager: React.FC = () => {
     }
 
     setBulkImportLoading(true);
+    setImportProgress(null);
     
     try {
       const text = await file.text();
@@ -240,7 +246,10 @@ const WalletManager: React.FC = () => {
         return;
       }
 
-      const result = await bulkImportWallets(lines);
+      const result = await bulkImportWallets(
+        lines,
+        (current, total) => setImportProgress({ current, total })
+      );
       
       if (result.success > 0) {
         setIsBulkImportModalVisible(false);
@@ -510,7 +519,11 @@ const WalletManager: React.FC = () => {
                     </Text>
                     {bulkImportLoading && (
                       <div style={{ marginTop: 20 }}>
-                        <Spin tip="Importing wallets..." />
+                        <Spin tip={
+                          importProgress 
+                            ? `Importing wallets... ${importProgress.current}/${importProgress.total}`
+                            : "Importing wallets..."
+                        } />
                       </div>
                     )}
                   </Space>
