@@ -54,7 +54,7 @@ wallet-manager/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/wallet-manager.git
+   git clone https://github.com/toanalien/wallet-manager.git
    cd wallet-manager
    ```
 
