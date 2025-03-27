@@ -16,7 +16,6 @@ import {
 } from "antd";
 import {
   PlusOutlined,
-  ImportOutlined,
   LockOutlined,
   DeleteOutlined,
   CopyOutlined,
@@ -37,7 +36,7 @@ const WalletManager: React.FC = () => {
     setMasterPassword,
     addWallet,
     importWallet,
-    importWatchOnlyWallet,
+    // importWatchOnlyWallet removed as it's no longer used
     bulkImportWallets,
     bulkImportWatchOnlyWallets,
     removeWallet,
@@ -53,8 +52,8 @@ const WalletManager: React.FC = () => {
     setIsPasswordModalVisible(!isPasswordSet);
   }, [isPasswordSet]);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState<boolean>(false);
-  const [isImportModalVisible, setIsImportModalVisible] = useState<boolean>(false);
-  const [isWatchOnlyModalVisible, setIsWatchOnlyModalVisible] = useState<boolean>(false);
+  // Removed individual import modal state
+  // Removed individual watch-only modal state
   const [isBulkImportModalVisible, setIsBulkImportModalVisible] = useState<boolean>(false);
   const [isBulkWatchOnlyModalVisible, setIsBulkWatchOnlyModalVisible] = useState<boolean>(false);
   const [isViewPrivateKeyModalVisible, setIsViewPrivateKeyModalVisible] = useState<boolean>(false);
@@ -70,8 +69,8 @@ const WalletManager: React.FC = () => {
   
   const [passwordForm] = Form.useForm();
   const [createForm] = Form.useForm();
-  const [importForm] = Form.useForm();
-  const [watchOnlyForm] = Form.useForm();
+  // Removed individual import form
+  // Removed individual watch-only form
   const [bulkImportForm] = Form.useForm();
   const [bulkWatchOnlyForm] = Form.useForm();
 
@@ -124,45 +123,9 @@ const WalletManager: React.FC = () => {
     createForm.resetFields();
   };
 
-  // Handle importing an existing wallet
-  const handleImportWallet = async (values: { name?: string; privateKey: string }) => {
-    const inputType = detectWalletInputType(values.privateKey);
-    
-    if (!inputType) {
-      message.error("Invalid input: not a valid private key or mnemonic phrase");
-      return;
-    }
-    
-    try {
-      // Use the utility function to create a wallet from the input
-      const walletData = createWalletFromInput(values.privateKey);
-      
-      // Import the wallet using the private key
-      await importWallet(values.name, walletData.privateKey);
-      
-      message.success(`Wallet imported successfully from ${inputType}`);
-      setIsImportModalVisible(false);
-      importForm.resetFields();
-    } catch (error) {
-      console.error("Failed to import wallet:", error);
-      message.error("Failed to import wallet");
-    }
-  };
+  // Removed individual import wallet handler
 
-  // Handle importing a watch-only wallet
-  const handleImportWatchOnlyWallet = async (values: { name?: string; address: string }) => {
-    try {
-      // Import the watch-only wallet
-      await importWatchOnlyWallet(values.name, values.address);
-      
-      message.success("Watch-only wallet imported successfully");
-      setIsWatchOnlyModalVisible(false);
-      watchOnlyForm.resetFields();
-    } catch (error) {
-      console.error("Failed to import watch-only wallet:", error);
-      message.error("Failed to import watch-only wallet");
-    }
-  };
+  // Removed individual watch-only wallet handler
 
   // Handle viewing a wallet's private key
   const handleViewPrivateKey = async (wallet: Wallet) => {
@@ -417,35 +380,7 @@ const WalletManager: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* Import Wallet Modal */}
-      <Modal
-        title="Import Wallet"
-        open={isImportModalVisible}
-        onCancel={() => setIsImportModalVisible(false)}
-        footer={null}
-      >
-        <Form form={importForm} onFinish={handleImportWallet} layout="vertical">
-          <Form.Item
-            name="name"
-            label="Wallet Name (optional)"
-            rules={[{ required: false }]}
-          >
-            <Input placeholder="Enter a name or leave empty for auto-generated name" />
-          </Form.Item>
-          <Form.Item
-            name="privateKey"
-            label="Private Key or Mnemonic Phrase"
-            rules={[{ required: true, message: "Please enter a private key or mnemonic phrase" }]}
-          >
-            <Input.Password placeholder="Enter a private key or mnemonic phrase" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block>
-              Import Wallet
-            </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
+      {/* Removed individual import wallet modal */}
 
       {/* View Private Key Modal */}
       <Modal
@@ -704,45 +639,7 @@ const WalletManager: React.FC = () => {
         />
       </Modal>
 
-      {/* Watch-Only Wallet Modal */}
-      <Modal
-        title="Import Watch-Only Wallet"
-        open={isWatchOnlyModalVisible}
-        onCancel={() => setIsWatchOnlyModalVisible(false)}
-        footer={null}
-      >
-        <Form form={watchOnlyForm} onFinish={handleImportWatchOnlyWallet} layout="vertical">
-          <Paragraph>
-            A watch-only wallet allows you to monitor an address without having access to the private key.
-            You cannot send transactions from a watch-only wallet.
-          </Paragraph>
-          <Form.Item
-            name="name"
-            label="Wallet Name (optional)"
-            rules={[{ required: false }]}
-          >
-            <Input placeholder="Enter a name or leave empty for auto-generated name" />
-          </Form.Item>
-          <Form.Item
-            name="address"
-            label="Ethereum Address"
-            rules={[
-              { required: true, message: "Please enter an Ethereum address" },
-              { 
-                pattern: /^0x[a-fA-F0-9]{40}$/, 
-                message: "Please enter a valid Ethereum address (0x followed by 40 hexadecimal characters)" 
-              }
-            ]}
-          >
-            <Input placeholder="Enter an Ethereum address (0x...)" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block>
-              Import Watch-Only Wallet
-            </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
+      {/* Removed individual watch-only wallet modal */}
 
       {/* Main Content */}
       <Card
@@ -769,34 +666,14 @@ const WalletManager: React.FC = () => {
             >
               Create Wallet
             </Button>
-            <Button
-              icon={<ImportOutlined />}
-              onClick={() => {
-                if (!masterPassword) {
-                  message.error("Please set a master password first");
-                  setIsPasswordModalVisible(true);
-                  return;
-                }
-                setIsImportModalVisible(true);
-              }}
-            >
-              Import Wallet
-            </Button>
-            <Button
-              icon={<EyeOutlined />}
-              onClick={() => {
-                setIsWatchOnlyModalVisible(true);
-              }}
-            >
-              Watch Address
-            </Button>
+            {/* Removed individual import wallet button */}
             <Button
               icon={<EyeOutlined />}
               onClick={() => {
                 setIsBulkWatchOnlyModalVisible(true);
               }}
             >
-              Bulk Watch
+              Watch Addresses
             </Button>
             <Button
               icon={<FileTextOutlined />}
