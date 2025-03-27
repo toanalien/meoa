@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
+  "author": "Toan Vo <toanalien@gmail.com>",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

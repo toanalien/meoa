@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
+  "author": "Toan Vo <toanalien@gmail.com>",
   "scripts": {
     "dev:fe": "pnpm --filter frontend dev",
     "build:fe": "pnpm --filter frontend build",
