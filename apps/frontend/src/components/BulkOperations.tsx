@@ -12,6 +12,8 @@ import {
   Alert,
   Spin,
   Tag,
+  Space,
+  Tooltip,
 } from "antd";
 import {
   SendOutlined,
@@ -176,17 +178,43 @@ const BulkOperations: React.FC = () => {
           setResults([]);
           setShowResults(false);
 
-          // Get private keys for selected wallets
+          // For balance checking, we only need addresses
+          if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
+            // Get addresses for selected wallets
+            const addresses: string[] = selectedWallets.map(walletId => {
+              const wallet = wallets.find(w => w.id === walletId);
+              return wallet ? wallet.address : "";
+            }).filter(address => address !== "");
+
+            if (addresses.length === 0) {
+              throw new Error("No valid wallet addresses found");
+            }
+
+            // Check balances
+            const operationResults = await bulkCheckNativeBalance(addresses, values.rpcUrl);
+            setResults(operationResults);
+            setShowResults(true);
+            return;
+          }
+
+          // For other operations, we need private keys
           const privateKeys: string[] = [];
           for (const walletId of selectedWallets) {
-            const wallet = await getDecryptedWallet(walletId);
-            if (wallet) {
-              privateKeys.push(wallet.privateKey);
+            const wallet = wallets.find(w => w.id === walletId);
+            
+            // Skip watch-only wallets for operations that require private keys
+            if (wallet?.isWatchOnly) {
+              continue;
+            }
+            
+            const decryptedWallet = await getDecryptedWallet(walletId);
+            if (decryptedWallet) {
+              privateKeys.push(decryptedWallet.privateKey);
             }
           }
 
           if (privateKeys.length === 0) {
-            throw new Error("Failed to decrypt wallets");
+            throw new Error("No valid wallets with private keys selected");
           }
 
           // Prepare transaction parameters
@@ -215,9 +243,6 @@ const BulkOperations: React.FC = () => {
             case OperationType.CUSTOM:
               operationResults = await bulkCustomTransaction(privateKeys, params, values.rpcUrl);
               break;
-            case OperationType.CHECK_NATIVE_BALANCE:
-              operationResults = await bulkCheckNativeBalance(privateKeys, values.rpcUrl);
-              break;
           }
 
           setResults(operationResults);
@@ -234,12 +259,33 @@ const BulkOperations: React.FC = () => {
     });
   };
 
+  // Define a type for the wallet table record
+  interface WalletTableRecord {
+    id: string;
+    name: string;
+    address: string;
+    isWatchOnly?: boolean;
+    key: string;
+  }
+
   // Table columns for wallet selection
   const walletColumns = [
     {
       title: "Name",
       dataIndex: "name",
       key: "name",
+      render: (text: string, record: WalletTableRecord) => (
+        <Space>
+          {text}
+          {record.isWatchOnly && (
+            <Tooltip title="Watch-only wallet">
+              <Text type="secondary" style={{ fontSize: "0.85rem" }}>
+                (Watch-only)
+              </Text>
+            </Tooltip>
+          )}
+        </Space>
+      ),
     },
     {
       title: "Address",
@@ -249,6 +295,15 @@ const BulkOperations: React.FC = () => {
         <Text style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
           {text}
         </Text>
+      ),
+    },
+    {
+      title: "Type",
+      key: "type",
+      render: (_: unknown, record: WalletTableRecord) => (
+        <Tag color={record.isWatchOnly ? "blue" : "green"}>
+          {record.isWatchOnly ? "Watch-only" : "Full Access"}
+        </Tag>
       ),
     },
   ];
@@ -377,11 +432,32 @@ const BulkOperations: React.FC = () => {
                 rules={[{ required: true, message: "Please select an operation type" }]}
               >
                 <Select onChange={(value) => handleOperationTypeChange(value as OperationType)}>
-                  <Option value={OperationType.SEND}>Send Native Tokens (ETH, BNB, etc.)</Option>
-                  <Option value={OperationType.TRANSFER_TOKEN}>Transfer ERC20 Tokens</Option>
-                  <Option value={OperationType.APPROVE_TOKEN}>Approve ERC20 Tokens</Option>
-                  <Option value={OperationType.CUSTOM}>Custom Transaction</Option>
-                  <Option value={OperationType.CHECK_NATIVE_BALANCE}>Check Native Balance</Option>
+                  <Option value={OperationType.SEND}>
+                    <Space>
+                      Send Native Tokens (ETH, BNB, etc.)
+                    </Space>
+                  </Option>
+                  <Option value={OperationType.TRANSFER_TOKEN}>
+                    <Space>
+                      Transfer ERC20 Tokens
+                    </Space>
+                  </Option>
+                  <Option value={OperationType.APPROVE_TOKEN}>
+                    <Space>
+                      Approve ERC20 Tokens
+                    </Space>
+                  </Option>
+                  <Option value={OperationType.CUSTOM}>
+                    <Space>
+                      Custom Transaction
+                    </Space>
+                  </Option>
+                  <Option value={OperationType.CHECK_NATIVE_BALANCE}>
+                    <Space>
+                      Check Native Balance
+                      <Tag color="blue" style={{ marginLeft: 8 }}>Safe</Tag>
+                    </Space>
+                  </Option>
                 </Select>
               </Form.Item>
 
@@ -472,6 +548,16 @@ const BulkOperations: React.FC = () => {
               </Form.Item>
 
               <Form.Item>
+                {operationType !== OperationType.CHECK_NATIVE_BALANCE && 
+                 selectedWallets.some(id => wallets.find(w => w.id === id)?.isWatchOnly) && (
+                  <Alert
+                    message="Watch-only wallets detected"
+                    description="Some selected wallets are watch-only and will be skipped for this operation as it requires private keys."
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                )}
                 <Button
                   type="primary"
                   htmlType="submit"

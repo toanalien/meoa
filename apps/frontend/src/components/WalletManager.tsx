@@ -37,6 +37,7 @@ const WalletManager: React.FC = () => {
     setMasterPassword,
     addWallet,
     importWallet,
+    importWatchOnlyWallet,
     bulkImportWallets,
     removeWallet,
     getDecryptedWallet,
@@ -52,6 +53,7 @@ const WalletManager: React.FC = () => {
   }, [isPasswordSet]);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState<boolean>(false);
   const [isImportModalVisible, setIsImportModalVisible] = useState<boolean>(false);
+  const [isWatchOnlyModalVisible, setIsWatchOnlyModalVisible] = useState<boolean>(false);
   const [isBulkImportModalVisible, setIsBulkImportModalVisible] = useState<boolean>(false);
   const [isViewPrivateKeyModalVisible, setIsViewPrivateKeyModalVisible] = useState<boolean>(false);
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
@@ -65,6 +67,7 @@ const WalletManager: React.FC = () => {
   const [passwordForm] = Form.useForm();
   const [createForm] = Form.useForm();
   const [importForm] = Form.useForm();
+  const [watchOnlyForm] = Form.useForm();
   const [bulkImportForm] = Form.useForm();
 
   // Generate a strong random password
@@ -138,6 +141,21 @@ const WalletManager: React.FC = () => {
     } catch (error) {
       console.error("Failed to import wallet:", error);
       message.error("Failed to import wallet");
+    }
+  };
+
+  // Handle importing a watch-only wallet
+  const handleImportWatchOnlyWallet = async (values: { name?: string; address: string }) => {
+    try {
+      // Import the watch-only wallet
+      await importWatchOnlyWallet(values.name, values.address);
+      
+      message.success("Watch-only wallet imported successfully");
+      setIsWatchOnlyModalVisible(false);
+      watchOnlyForm.resetFields();
+    } catch (error) {
+      console.error("Failed to import watch-only wallet:", error);
+      message.error("Failed to import watch-only wallet");
     }
   };
 
@@ -503,6 +521,46 @@ const WalletManager: React.FC = () => {
         />
       </Modal>
 
+      {/* Watch-Only Wallet Modal */}
+      <Modal
+        title="Import Watch-Only Wallet"
+        open={isWatchOnlyModalVisible}
+        onCancel={() => setIsWatchOnlyModalVisible(false)}
+        footer={null}
+      >
+        <Form form={watchOnlyForm} onFinish={handleImportWatchOnlyWallet} layout="vertical">
+          <Paragraph>
+            A watch-only wallet allows you to monitor an address without having access to the private key.
+            You cannot send transactions from a watch-only wallet.
+          </Paragraph>
+          <Form.Item
+            name="name"
+            label="Wallet Name (optional)"
+            rules={[{ required: false }]}
+          >
+            <Input placeholder="Enter a name or leave empty for auto-generated name" />
+          </Form.Item>
+          <Form.Item
+            name="address"
+            label="Ethereum Address"
+            rules={[
+              { required: true, message: "Please enter an Ethereum address" },
+              { 
+                pattern: /^0x[a-fA-F0-9]{40}$/, 
+                message: "Please enter a valid Ethereum address (0x followed by 40 hexadecimal characters)" 
+              }
+            ]}
+          >
+            <Input placeholder="Enter an Ethereum address (0x...)" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block>
+              Import Watch-Only Wallet
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
       {/* Main Content */}
       <Card
         title="Wallet Management"
@@ -542,6 +600,14 @@ const WalletManager: React.FC = () => {
               Import Wallet
             </Button>
             <Button
+              icon={<EyeOutlined />}
+              onClick={() => {
+                setIsWatchOnlyModalVisible(true);
+              }}
+            >
+              Watch Address
+            </Button>
+            <Button
               icon={<FileTextOutlined />}
               onClick={() => {
                 if (!masterPassword) {
@@ -568,10 +634,11 @@ const WalletManager: React.FC = () => {
             renderItem={(wallet) => (
               <List.Item
                 actions={[
-                  <Tooltip title="View Private Key" key="view">
+                  <Tooltip title={wallet.isWatchOnly ? "No private key for watch-only wallets" : "View Private Key"} key="view">
                     <Button
                       icon={<EyeOutlined />}
                       onClick={() => handleViewPrivateKey(wallet)}
+                      disabled={wallet.isWatchOnly}
                     />
                   </Tooltip>,
                   <Tooltip title="Copy Address" key="copy">
@@ -596,7 +663,18 @@ const WalletManager: React.FC = () => {
                 ]}
               >
                 <List.Item.Meta
-                  title={wallet.name}
+                  title={
+                    <Space>
+                      {wallet.name}
+                      {wallet.isWatchOnly && (
+                        <Tooltip title="Watch-only wallet">
+                          <Text type="secondary" style={{ fontSize: "0.85rem" }}>
+                            (Watch-only)
+                          </Text>
+                        </Tooltip>
+                      )}
+                    </Space>
+                  }
                   description={
                     <Text copyable style={{ fontSize: "0.85rem" }}>
                       {wallet.address}

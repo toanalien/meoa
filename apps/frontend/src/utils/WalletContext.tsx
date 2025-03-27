@@ -8,6 +8,7 @@ export interface Wallet {
   name: string;
   address: string;
   encryptedPrivateKey: string;
+  isWatchOnly?: boolean;
 }
 
 interface WalletContextType {
@@ -16,6 +17,7 @@ interface WalletContextType {
   setMasterPassword: (password: string) => void;
   addWallet: (name?: string) => Promise<Wallet | null>;
   importWallet: (name: string | undefined, privateKey: string) => Promise<Wallet | null>;
+  importWatchOnlyWallet: (name: string | undefined, address: string) => Promise<Wallet | null>;
   bulkImportWallets: (inputs: string[]) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
   removeWallet: (id: string) => void;
   getDecryptedWallet: (id: string) => Promise<{ privateKey: string; address: string } | null>;
@@ -367,6 +369,37 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     message.success("Wallet removed successfully");
   };
 
+  const importWatchOnlyWallet = async (name: string | undefined, address: string): Promise<Wallet | null> => {
+    try {
+      // Validate the address format (basic check for Ethereum address)
+      if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
+        message.error("Invalid Ethereum address format");
+        return null;
+      }
+      
+      // Use provided name or generate one
+      const walletName = name?.trim() ? name : "Watch-Only Wallet #" + (wallets.filter(w => w.name.startsWith("Watch-Only Wallet #")).length + 1);
+      
+      const wallet: Wallet = {
+        id: Date.now().toString(),
+        name: walletName,
+        address,
+        encryptedPrivateKey: "", // Empty for watch-only wallets
+        isWatchOnly: true,
+      };
+
+      const updatedWallets = [...wallets, wallet];
+      setWallets(updatedWallets);
+      saveWalletsToLocalStorage(updatedWallets);
+      message.success("Watch-only wallet imported successfully");
+      return wallet;
+    } catch (error) {
+      console.error("Failed to import watch-only wallet:", error);
+      message.error("Failed to import watch-only wallet");
+      return null;
+    }
+  };
+
   const getDecryptedWallet = async (id: string) => {
     if (!masterPassword) {
       message.error("Master password not set");
@@ -376,6 +409,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     const wallet = wallets.find((w) => w.id === id);
     if (!wallet) {
       message.error("Wallet not found");
+      return null;
+    }
+
+    // Check if it's a watch-only wallet
+    if (wallet.isWatchOnly) {
+      message.error("Cannot decrypt a watch-only wallet as it has no private key");
       return null;
     }
 
@@ -395,6 +434,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     setMasterPassword,
     addWallet,
     importWallet,
+    importWatchOnlyWallet,
     bulkImportWallets,
     removeWallet,
     getDecryptedWallet,

@@ -271,21 +271,19 @@ export async function getTokenBalance(
 
 /**
  * Checks native token balances for multiple wallets in bulk
- * @param privateKeys Array of private keys
+ * @param addresses Array of wallet addresses
  * @param rpcUrl The RPC URL for the network
  * @returns Array of operation results with wallet addresses and balances
  */
 export async function bulkCheckNativeBalance(
-  privateKeys: string[],
+  addresses: string[],
   rpcUrl: string
 ): Promise<BulkOperationResult[]> {
   const provider = createProvider(rpcUrl);
   const results: BulkOperationResult[] = [];
 
-  for (const privateKey of privateKeys) {
+  for (const address of addresses) {
     try {
-      const wallet = new Wallet(privateKey);
-      const address = wallet.address;
       const balance = await provider.getBalance(address);
       
       results.push({
@@ -296,7 +294,7 @@ export async function bulkCheckNativeBalance(
     } catch (error) {
       console.error(`Error checking balance for wallet:`, error);
       results.push({
-        walletAddress: new Wallet(privateKey).address,
+        walletAddress: address,
         success: false,
         error: error instanceof Error ? error.message : String(error),
       });
