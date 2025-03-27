@@ -321,10 +321,8 @@ const WalletManager: React.FC = () => {
       >
         <Form form={passwordForm} onFinish={handleSetPassword} layout="vertical">
           <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
-            <strong>IMPORTANT DISCLAIMER:</strong> This password will be used to encrypt and decrypt your wallet private keys.
-            Make sure to remember it as it cannot be recovered. The author is not responsible for any loss of assets
-            or user input. By setting a password, you acknowledge that you are solely responsible for managing your
-            wallet security and private keys.
+            <strong>IMPORTANT DISCLAIMER:</strong><br />
+            This password is used to encrypt and decrypt your wallet's private keys and cannot be recovered if lost or forgotten. By choosing a password, you acknowledge that you alone are responsible for managing your wallet security and private keys. The author assumes no liability for any loss of assets or user input arising from password mismanagement or other security issues.
           </Paragraph>
           <Form.Item
             name="password"
@@ -368,8 +366,8 @@ const WalletManager: React.FC = () => {
       >
         <Form form={createForm} onFinish={handleCreateWallet} layout="vertical">
           <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
-            <strong>IMPORTANT DISCLAIMER:</strong> By creating a wallet, you acknowledge that the author is not responsible for any loss of assets
-            or user input. You are solely responsible for securing your wallet and private keys.
+            <strong>IMPORTANT DISCLAIMER:</strong><br />
+            By creating a wallet, you acknowledge that you alone are responsible for securing your wallet and private keys. The author assumes no liability for any loss of assets or user input arising from wallet management or other security issues.
           </Paragraph>
           <Form.Item
             name="name"
@@ -431,10 +429,8 @@ const WalletManager: React.FC = () => {
       >
         <Space direction="vertical" style={{ width: "100%" }}>
           <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
-            <strong>IMPORTANT DISCLAIMER:</strong> Never share your private key with anyone. Anyone with your private key has full
-            control of your wallet. The author is not responsible for any loss of assets resulting from sharing or mishandling 
-            of private keys. By viewing and/or copying this private key, you acknowledge that you are solely responsible for 
-            its security.
+            <strong>IMPORTANT DISCLAIMER:</strong><br />
+            Never share your private key with anyone. Anyone with your private key has full control of your wallet. By viewing and/or copying this private key, you acknowledge that you alone are responsible for its security. The author assumes no liability for any loss of assets arising from sharing, mishandling, or unauthorized access to your private keys.
           </Paragraph>
           <div style={{ display: "flex", alignItems: "center" }}>
             <Input.Password
@@ -477,10 +473,8 @@ const WalletManager: React.FC = () => {
         width={600}
       >
         <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
-          <strong>IMPORTANT DISCLAIMER:</strong> Import multiple wallets at once by providing a list of private keys or mnemonic phrases.
-          Each line will be treated as a separate wallet. The author is not responsible for any loss of assets
-          or user input. By importing wallets, you acknowledge that you are solely responsible for the security
-          of your private keys and wallet management.
+          <strong>IMPORTANT DISCLAIMER:</strong><br />
+          Import multiple wallets at once by providing a list of private keys or mnemonic phrases. Each line will be treated as a separate wallet. By importing wallets, you acknowledge that you alone are responsible for the security of your private keys and wallet management. The author assumes no liability for any loss of assets or user input arising from wallet management or other security issues.
         </Paragraph>
         
         <Tabs
@@ -576,10 +570,8 @@ const WalletManager: React.FC = () => {
         width={600}
       >
         <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
-          <strong>IMPORTANT DISCLAIMER:</strong> Import multiple watch-only wallets at once by providing a list of Ethereum addresses.
-          Each line will be treated as a separate watch-only wallet. The author is not responsible for any loss of assets
-          or user input. By importing watch-only wallets, you acknowledge that you are solely responsible for managing your
-          wallet addresses.
+          <strong>IMPORTANT DISCLAIMER:</strong><br />
+          Import multiple watch-only wallets at once by providing a list of Ethereum addresses. Each line will be treated as a separate watch-only wallet. By importing watch-only wallets, you acknowledge that you alone are responsible for managing your wallet addresses. The author assumes no liability for any loss of assets or user input arising from wallet management or other security issues.
         </Paragraph>
         
         <Tabs
