@@ -1,0 +1,16 @@
+{
+  "name": "wallet-manager",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:fe": "pnpm --filter frontend dev",
+    "build:fe": "pnpm --filter frontend build",
+    "dev:be": "pnpm --filter backend dev",
+    "build:be": "pnpm --filter backend build",
+    "lint": "pnpm --filter \"*\" lint",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
+  }
+}
