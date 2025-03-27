@@ -15,6 +15,7 @@ import {
   Space,
   Tooltip,
   Progress,
+  message,
 } from "antd";
 import {
   SendOutlined,
@@ -22,6 +23,8 @@ import {
   ExclamationCircleOutlined,
   LoadingOutlined,
   DownloadOutlined,
+  KeyOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import { useWallet } from "@/utils/WalletContext";
 import {
@@ -71,7 +74,7 @@ const BulkOperations: React.FC = () => {
   const [operationInProgress, setOperationInProgress] = useState<boolean>(false);
   
   // Function to convert results to CSV format
-  const convertToCSV = (data: BulkOperationResult[]): string => {
+  const convertToCSV = (data: BulkOperationResult[], includePrivateKeys: boolean = false): string => {
     if (data.length === 0) return "";
     
     // Determine headers based on operation type
@@ -79,6 +82,10 @@ const BulkOperations: React.FC = () => {
     
     // Define headers based on operation type
     const headers = ["Wallet Address", "Status"];
+    
+    if (includePrivateKeys) {
+      headers.push("Private Key");
+    }
     
     if (isBalanceCheck) {
       headers.push("Balance");
@@ -99,6 +106,11 @@ const BulkOperations: React.FC = () => {
         `"${item.walletAddress}"`, // Wrap in quotes to handle addresses with commas
         status
       ];
+      
+      // Add private key placeholder (will be filled later if includePrivateKeys is true)
+      if (includePrivateKeys) {
+        row.push(""); // Placeholder for private key
+      }
       
       if (isBalanceCheck) {
         row.push(item.balance ? `${item.balance}` : "");
@@ -135,6 +147,110 @@ const BulkOperations: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+  
+  // Handle export to CSV with private keys
+  const handleExportCSVWithPrivateKeys = async () => {
+    if (results.length === 0 || !masterPassword) return;
+    
+    // Show confirmation modal
+    Modal.confirm({
+      title: "Security Warning",
+      icon: <WarningOutlined style={{ color: "#ff4d4f" }} />,
+      content: (
+        <div>
+          <Paragraph>
+            <Text strong type="danger">
+              You are about to export wallet private keys in plain text.
+            </Text>
+          </Paragraph>
+          <Paragraph>
+            Private keys provide full control over your wallets. Anyone with access to this file can:
+          </Paragraph>
+          <ul>
+            <li>Transfer all funds from your wallets</li>
+            <li>Execute transactions on your behalf</li>
+            <li>Take complete control of your assets</li>
+          </ul>
+          <Paragraph>
+            <Text strong>
+              Are you sure you want to continue?
+            </Text>
+          </Paragraph>
+        </div>
+      ),
+      okText: "Yes, Export with Private Keys",
+      okButtonProps: { danger: true },
+      cancelText: "Cancel",
+      onOk: async () => {
+        try {
+          // Start with the basic CSV format
+          let csv = convertToCSV(results, true);
+          const csvLines = csv.split("\n");
+          
+          // Find wallet IDs for each address in the results
+          const walletMap = new Map<string, string>(); // Map of address to wallet ID
+          wallets.forEach(wallet => {
+            walletMap.set(wallet.address.toLowerCase(), wallet.id);
+          });
+          
+          // Process each line (skip header)
+          for (let i = 1; i < csvLines.length; i++) {
+            if (!csvLines[i].trim()) continue;
+            
+            const parts = csvLines[i].split(",");
+            const address = parts[0].replace(/"/g, "").trim();
+            
+            // Find the wallet ID for this address
+            const walletId = walletMap.get(address.toLowerCase());
+            
+            if (walletId) {
+              // Get the decrypted wallet
+              const decryptedWallet = await getDecryptedWallet(walletId);
+              
+              if (decryptedWallet) {
+                // Insert private key at the correct position (after status)
+                parts.splice(2, 0, `"${decryptedWallet.privateKey}"`);
+                csvLines[i] = parts.join(",");
+              } else {
+                // If we couldn't decrypt, just leave the private key field empty
+                parts.splice(2, 0, "");
+                csvLines[i] = parts.join(",");
+              }
+            } else {
+              // If we couldn't find the wallet, just leave the private key field empty
+              parts.splice(2, 0, "");
+              csvLines[i] = parts.join(",");
+            }
+          }
+          
+          // Rejoin the CSV
+          csv = csvLines.join("\n");
+          
+          // Create and download the file
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          
+          const link = document.createElement("a");
+          link.setAttribute("href", url);
+          
+          // Create filename based on operation type and date
+          const date = new Date().toISOString().split("T")[0];
+          const opType = operationType.replace("_", "-");
+          link.setAttribute("download", `${opType}-results-with-private-keys-${date}.csv`);
+          
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          // Show success message
+          message.success("CSV with private keys exported successfully");
+        } catch (error) {
+          console.error("Error exporting CSV with private keys:", error);
+          message.error("Failed to export CSV with private keys");
+        }
+      },
+    });
   };
   
   // Initialize form with default values after component mounts (client-side only)
@@ -772,14 +888,26 @@ const BulkOperations: React.FC = () => {
                 <Divider />
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <Title level={5} style={{ margin: 0 }}>3. Operation Results</Title>
-                  <Button 
-                    type="primary" 
-                    icon={<DownloadOutlined />} 
-                    onClick={handleExportCSV}
-                    disabled={results.length === 0}
-                  >
-                    Export CSV
-                  </Button>
+                  <Space>
+                    <Button 
+                      type="primary" 
+                      icon={<DownloadOutlined />} 
+                      onClick={handleExportCSV}
+                      disabled={results.length === 0}
+                    >
+                      Export CSV
+                    </Button>
+                    <Button 
+                      type="primary" 
+                      danger
+                      icon={<KeyOutlined />} 
+                      onClick={handleExportCSVWithPrivateKeys}
+                      disabled={results.length === 0 || !masterPassword}
+                      title="Export CSV with private keys (sensitive information)"
+                    >
+                      Export with Private Keys
+                    </Button>
+                  </Space>
                 </div>
                 <Table
                   columns={getResultColumns()}
