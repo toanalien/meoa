@@ -98,3 +98,7 @@ pnpm build
 - Ant Design: UI components
 - ethers.js: Ethereum library
 - CryptoJS: Encryption library
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details.

@@ -2,6 +2,7 @@
   "name": "wallet-manager",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev:fe": "pnpm --filter frontend dev",
     "build:fe": "pnpm --filter frontend build",

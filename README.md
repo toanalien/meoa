@@ -87,4 +87,4 @@ The build output will be in the `apps/frontend/out` directory, which can be serv
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

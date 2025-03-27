@@ -32,6 +32,7 @@ Building a service that manages wallets for users and enables bulk actions for m
 - [x] Created project README with overview and setup instructions
 - [x] Added frontend documentation
 - [x] Set up .gitignore for version control
+- [x] Added MIT license to the project
 
 ## Pending Tasks
 
