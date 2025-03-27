@@ -51,6 +51,14 @@ Building a service that manages wallets for users and enables bulk actions for m
 - [ ] Deploy to hosting service
 
 ### Enhancements
+- [x] Added "recommend password" checkbox when entering master password
+- [x] Fixed wallet persistence in local storage when page is refreshed
+- [x] Added secure master password storage for session persistence
+- [x] Improved wallet storage reliability with multiple storage strategies:
+  - Added new storage keys with migration from legacy keys
+  - Implemented fallback mechanisms (localStorage + sessionStorage)
+  - Added robust error handling for storage operations
+  - Eliminated duplicate storage entries
 - [ ] Add transaction history tracking
 - [ ] Implement address book functionality
 - [ ] Add support for hardware wallets

@@ -5,10 +5,8 @@ import {
   Form,
   Input,
   Select,
-  Checkbox,
   Table,
   Typography,
-  Space,
   Divider,
   Modal,
   Alert,
@@ -17,12 +15,11 @@ import {
 } from "antd";
 import {
   SendOutlined,
-  SwapOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   LoadingOutlined,
 } from "@ant-design/icons";
-import { useWallet, Wallet } from "@/utils/WalletContext";
+import { useWallet } from "@/utils/WalletContext";
 import {
   bulkSend,
   bulkTransferToken,
@@ -62,7 +59,7 @@ const BulkOperations: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [results, setResults] = useState<BulkOperationResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
-  const [customRpcUrl, setCustomRpcUrl] = useState<string>("");
+  // Removed unused state variables
   
   // Initialize form with default values after component mounts (client-side only)
   useEffect(() => {
@@ -98,8 +95,21 @@ const BulkOperations: React.FC = () => {
     }
   };
 
+  // Define the form values type
+  interface FormValues {
+    operationType: OperationType;
+    network: string;
+    rpcUrl: string;
+    to: string;
+    value?: string;
+    tokenAddress?: string;
+    data?: string;
+    gasLimit?: string;
+    gasPrice?: string;
+  }
+
   // Execute the bulk operation
-  const handleExecuteOperation = async (values: any) => {
+  const handleExecuteOperation = async (values: FormValues) => {
     if (!masterPassword) {
       Modal.error({
         title: "Master Password Required",

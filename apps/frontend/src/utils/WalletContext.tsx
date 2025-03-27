@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { message } from "antd";
-import { encryptWallet, decryptWallet, generateWallet } from "./walletUtils";
+import { encryptWallet, decryptWallet, generateWallet } from "@/utils/walletUtils";
+import CryptoJS from "crypto-js";
 
 export interface Wallet {
   id: string;
@@ -39,37 +40,175 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const [masterPassword, setMasterPasswordState] = useState<string | null>(null);
   const [isPasswordSet, setIsPasswordSet] = useState<boolean>(false);
 
-  // Load wallets from localStorage on initial render (client-side only)
+  // Constants for storage keys
+  const WALLET_STORAGE_KEY = "meoa_wallets";
+  const PASSWORD_FLAG_KEY = "meoa_has_password";
+  const ENCRYPTED_PASSWORD_KEY = "meoa_encrypted_master_password";
+  
+  // Legacy keys for backward compatibility
+  const LEGACY_WALLET_KEY = "wallets";
+  const LEGACY_PASSWORD_FLAG_KEY = "hasPassword";
+  const LEGACY_ENCRYPTED_PASSWORD_KEY = "encryptedMasterPassword";
+
+  // Encrypt master password for storage
+  const encryptMasterPassword = (password: string): string => {
+    // Use a fixed salt for simplicity (in a production app, you might want to use a more secure approach)
+    const salt = "wallet-manager-salt";
+    return CryptoJS.AES.encrypt(password, salt).toString();
+  };
+
+  // Decrypt master password from storage
+  const decryptMasterPassword = (encryptedPassword: string): string => {
+    const salt = "wallet-manager-salt";
+    const bytes = CryptoJS.AES.decrypt(encryptedPassword, salt);
+    return bytes.toString(CryptoJS.enc.Utf8);
+  };
+
+  // Helper function to save wallets to localStorage
+  const saveWalletsToLocalStorage = (walletsToSave: Wallet[]) => {
+    if (typeof window !== "undefined") {
+      try {
+        console.log("Explicitly saving wallets to localStorage:", walletsToSave);
+        
+        // Stringify the wallet data
+        const walletData = JSON.stringify(walletsToSave);
+        
+        // Save to the new key
+        localStorage.setItem(WALLET_STORAGE_KEY, walletData);
+        
+        // Also save to sessionStorage as a backup
+        sessionStorage.setItem(WALLET_STORAGE_KEY, walletData);
+        
+        // Remove the legacy key to avoid duplication
+        if (localStorage.getItem(LEGACY_WALLET_KEY)) {
+          localStorage.removeItem(LEGACY_WALLET_KEY);
+        }
+        
+        // Verify the wallets were saved correctly
+        const storedWallets = localStorage.getItem(WALLET_STORAGE_KEY);
+        console.log("Verified explicitly stored wallets:", storedWallets);
+      } catch (error) {
+        console.error("Failed to save wallets to localStorage:", error);
+        message.error("Failed to save wallets");
+      }
+    }
+  };
+
+  // Load wallets and master password from localStorage on initial render (client-side only)
   useEffect(() => {
     // Only run on the client side
     if (typeof window !== "undefined") {
-      const storedWallets = localStorage.getItem("wallets");
+      console.log("Loading data from localStorage on initial render");
+      
+      // Try to load wallets from different storage locations in order of preference
+      let loadedWallets: Wallet[] | null = null;
+      
+      // 1. Try new localStorage key
+      const storedWallets = localStorage.getItem(WALLET_STORAGE_KEY);
+      console.log("Stored wallets (new key):", storedWallets);
+      
       if (storedWallets) {
         try {
-          setWallets(JSON.parse(storedWallets));
+          loadedWallets = JSON.parse(storedWallets);
         } catch (error) {
-          console.error("Failed to parse stored wallets:", error);
-          message.error("Failed to load stored wallets");
+          console.error("Failed to parse stored wallets (new key):", error);
         }
       }
+      
+      // 2. If not found, try legacy localStorage key
+      if (!loadedWallets) {
+        const legacyWallets = localStorage.getItem(LEGACY_WALLET_KEY);
+        console.log("Stored wallets (legacy key):", legacyWallets);
+        
+        if (legacyWallets) {
+          try {
+            loadedWallets = JSON.parse(legacyWallets);
+          } catch (error) {
+            console.error("Failed to parse stored wallets (legacy key):", error);
+          }
+        }
+      }
+      
+      // 3. If still not found, try sessionStorage
+      if (!loadedWallets) {
+        const sessionWallets = sessionStorage.getItem(WALLET_STORAGE_KEY);
+        console.log("Stored wallets (session storage):", sessionWallets);
+        
+        if (sessionWallets) {
+          try {
+            loadedWallets = JSON.parse(sessionWallets);
+          } catch (error) {
+            console.error("Failed to parse stored wallets (session storage):", error);
+          }
+        }
+      }
+      
+      // Set wallets if we found them
+      if (loadedWallets && Array.isArray(loadedWallets)) {
+        console.log("Setting wallets from storage:", loadedWallets);
+        setWallets(loadedWallets);
+        
+        // Ensure wallets are saved with the new key format
+        saveWalletsToLocalStorage(loadedWallets);
+      } else {
+        console.log("No wallets found in storage or invalid format");
+      }
 
-      // Check if password is set
-      const hasPassword = localStorage.getItem("hasPassword");
+      // Check if password is set (try both new and legacy keys)
+      const hasPassword = localStorage.getItem(PASSWORD_FLAG_KEY) || localStorage.getItem(LEGACY_PASSWORD_FLAG_KEY);
       setIsPasswordSet(hasPassword === "true");
+      
+      // Load encrypted master password if it exists (try both new and legacy keys)
+      const encryptedMasterPassword = 
+        localStorage.getItem(ENCRYPTED_PASSWORD_KEY) || 
+        localStorage.getItem(LEGACY_ENCRYPTED_PASSWORD_KEY);
+      
+      console.log("Encrypted master password:", encryptedMasterPassword);
+      
+      if (encryptedMasterPassword) {
+        try {
+          const decryptedPassword = decryptMasterPassword(encryptedMasterPassword);
+          console.log("Master password decrypted successfully");
+          setMasterPasswordState(decryptedPassword);
+        } catch (error) {
+          console.error("Failed to decrypt master password:", error);
+          // Don't show an error message to the user, just let them enter the password again
+        }
+      }
     }
   }, []);
 
   // Save wallets to localStorage whenever they change (client-side only)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("wallets", JSON.stringify(wallets));
+    if (typeof window !== "undefined" && wallets.length > 0) {
+      console.log("Saving wallets to localStorage from useEffect:", wallets);
+      saveWalletsToLocalStorage(wallets);
     }
   }, [wallets]);
 
   const setMasterPassword = (password: string) => {
     setMasterPasswordState(password);
     if (typeof window !== "undefined") {
-      localStorage.setItem("hasPassword", "true");
+      // Store password flag in the new key
+      localStorage.setItem(PASSWORD_FLAG_KEY, "true");
+      
+      // Store encrypted master password in the new key
+      const encryptedPassword = encryptMasterPassword(password);
+      localStorage.setItem(ENCRYPTED_PASSWORD_KEY, encryptedPassword);
+      
+      // Remove legacy keys to avoid duplication
+      if (localStorage.getItem(LEGACY_PASSWORD_FLAG_KEY)) {
+        localStorage.removeItem(LEGACY_PASSWORD_FLAG_KEY);
+      }
+      if (localStorage.getItem(LEGACY_ENCRYPTED_PASSWORD_KEY)) {
+        localStorage.removeItem(LEGACY_ENCRYPTED_PASSWORD_KEY);
+      }
+      
+      // Save wallets to localStorage when setting master password
+      if (wallets.length > 0) {
+        console.log("Saving wallets when setting master password:", wallets);
+        saveWalletsToLocalStorage(wallets);
+      }
     }
     setIsPasswordSet(true);
     message.success("Master password set successfully");
@@ -92,7 +231,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         encryptedPrivateKey,
       };
 
-      setWallets((prev) => [...prev, wallet]);
+      const updatedWallets = [...wallets, wallet];
+      setWallets(updatedWallets);
+      saveWalletsToLocalStorage(updatedWallets);
       message.success("Wallet created successfully");
       return wallet;
     } catch (error) {
@@ -111,7 +252,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     try {
       const encryptedPrivateKey = await encryptWallet(privateKey, masterPassword);
       const address = await decryptWallet(encryptedPrivateKey, masterPassword).then(
-        (result) => result.address
+        (result: { address: string }) => result.address
       );
       
       const wallet: Wallet = {
@@ -121,7 +262,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         encryptedPrivateKey,
       };
 
-      setWallets((prev) => [...prev, wallet]);
+      const updatedWallets = [...wallets, wallet];
+      setWallets(updatedWallets);
+      saveWalletsToLocalStorage(updatedWallets);
       message.success("Wallet imported successfully");
       return wallet;
     } catch (error) {
@@ -132,7 +275,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   };
 
   const removeWallet = (id: string) => {
-    setWallets((prev) => prev.filter((wallet) => wallet.id !== id));
+    const updatedWallets = wallets.filter((wallet) => wallet.id !== id);
+    setWallets(updatedWallets);
+    saveWalletsToLocalStorage(updatedWallets);
     message.success("Wallet removed successfully");
   };
 

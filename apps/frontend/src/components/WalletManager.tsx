@@ -9,8 +9,8 @@ import {
   Typography,
   Space,
   Tooltip,
-  Divider,
   message,
+  Checkbox,
 } from "antd";
 import {
   PlusOutlined,
@@ -51,9 +51,22 @@ const WalletManager: React.FC = () => {
   const [selectedWallet, setSelectedWallet] = useState<Wallet | null>(null);
   const [privateKey, setPrivateKey] = useState<string>("");
   const [showPrivateKey, setShowPrivateKey] = useState<boolean>(false);
+  const [recommendPassword, setRecommendPassword] = useState<boolean>(false);
   const [passwordForm] = Form.useForm();
   const [createForm] = Form.useForm();
   const [importForm] = Form.useForm();
+
+  // Generate a strong random password
+  const generateStrongPassword = (): string => {
+    const length = 16;
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
+    let password = "";
+    for (let i = 0; i < length; i++) {
+      const randomIndex = Math.floor(Math.random() * charset.length);
+      password += charset[randomIndex];
+    }
+    return password;
+  };
 
   // Handle setting the master password
   const handleSetPassword = (values: { password: string; confirmPassword: string }) => {
@@ -65,6 +78,24 @@ const WalletManager: React.FC = () => {
     setMasterPassword(values.password);
     setIsPasswordModalVisible(false);
     passwordForm.resetFields();
+    setRecommendPassword(false);
+  };
+
+  // Handle recommend password change
+  const handleRecommendPasswordChange = (checked: boolean) => {
+    setRecommendPassword(checked);
+    if (checked) {
+      const strongPassword = generateStrongPassword();
+      passwordForm.setFieldsValue({
+        password: strongPassword,
+        confirmPassword: strongPassword
+      });
+    } else {
+      passwordForm.setFieldsValue({
+        password: "",
+        confirmPassword: ""
+      });
+    }
   };
 
   // Handle creating a new wallet
@@ -151,6 +182,14 @@ const WalletManager: React.FC = () => {
               prefix={<LockOutlined />}
               placeholder="Confirm your master password"
             />
+          </Form.Item>
+          <Form.Item>
+            <Checkbox 
+              checked={recommendPassword}
+              onChange={(e) => handleRecommendPasswordChange(e.target.checked)}
+            >
+              Recommend strong password
+            </Checkbox>
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" block>

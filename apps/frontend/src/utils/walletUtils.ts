@@ -70,7 +70,7 @@ export function isValidPrivateKey(privateKey: string): boolean {
     // Try to create a wallet with this private key
     new Wallet(`0x${cleanPrivateKey}`);
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
