@@ -81,6 +81,12 @@ Building a service that manages wallets for users and enables bulk actions for m
   - Created dynamic headers based on operation type
   - Included proper CSV formatting with quotes and escaping
   - Generated filename based on operation type and date
+- [x] Enhanced operation progress visibility:
+  - Added progress indicator inside the "Confirm Operation" modal
+  - Implemented real-time progress tracking with percentage display
+  - Added visual progress bar to show completion status
+  - Disabled modal controls during operation execution
+  - Maintained backward compatibility with existing progress display
 - [ ] Add transaction history tracking
 - [ ] Implement address book functionality
 - [ ] Add support for hardware wallets

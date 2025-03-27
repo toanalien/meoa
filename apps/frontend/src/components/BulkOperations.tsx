@@ -14,6 +14,7 @@ import {
   Tag,
   Space,
   Tooltip,
+  Progress,
 } from "antd";
 import {
   SendOutlined,
@@ -65,6 +66,8 @@ const BulkOperations: React.FC = () => {
   const [results, setResults] = useState<BulkOperationResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [confirmModalVisible, setConfirmModalVisible] = useState<boolean>(false);
+  const [operationInProgress, setOperationInProgress] = useState<boolean>(false);
   
   // Function to convert results to CSV format
   const convertToCSV = (data: BulkOperationResult[]): string => {
@@ -179,7 +182,7 @@ const BulkOperations: React.FC = () => {
   }
 
   // Execute the bulk operation
-  const handleExecuteOperation = async (values: FormValues) => {
+  const handleExecuteOperation = async () => {
     if (!masterPassword) {
       Modal.error({
         title: "Master Password Required",
@@ -196,163 +199,128 @@ const BulkOperations: React.FC = () => {
       return;
     }
 
-    // Confirm the operation
-    Modal.confirm({
-      title: "Confirm Operation",
-      icon: <ExclamationCircleOutlined />,
-      content: (
-        <div>
-          <Paragraph>
-            You are about to perform a bulk operation on {selectedWallets.length} wallet(s).
-            This action cannot be undone.
-          </Paragraph>
-          <Paragraph>
-            <Text strong>Operation:</Text>{" "}
-            {operationType === OperationType.SEND
-              ? "Send Native Tokens"
-              : operationType === OperationType.TRANSFER_TOKEN
-              ? "Transfer Tokens"
-              : operationType === OperationType.APPROVE_TOKEN
-              ? "Approve Tokens"
-              : operationType === OperationType.CHECK_NATIVE_BALANCE
-              ? "Check Native Balance"
-              : "Custom Transaction"}
-          </Paragraph>
-          <Paragraph>
-            <Text strong>Network:</Text> {values.network === "custom" ? "Custom RPC" : values.network}
-          </Paragraph>
-          {operationType !== OperationType.CHECK_NATIVE_BALANCE && (
-            <Paragraph>
-              <Text strong>To Address:</Text> {values.to}
-            </Paragraph>
-          )}
-          {values.value && (
-            <Paragraph>
-              <Text strong>Value:</Text> {values.value}
-            </Paragraph>
-          )}
-          {values.tokenAddress && (
-            <Paragraph>
-              <Text strong>Token Address:</Text> {values.tokenAddress}
-            </Paragraph>
-          )}
-        </div>
-      ),
-      onOk: async () => {
-        try {
-          setLoading(true);
-          setResults([]);
-          setShowResults(false);
+    // Show the custom confirm modal
+    setConfirmModalVisible(true);
+  };
 
-          // For balance checking, we only need addresses
-          if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
-            // Get addresses for selected wallets
-            const addresses: string[] = selectedWallets.map(walletId => {
-              const wallet = wallets.find(w => w.id === walletId);
-              return wallet ? wallet.address : "";
-            }).filter(address => address !== "");
+  // Handle the actual operation execution
+  const executeOperation = async () => {
+    const values = form.getFieldsValue() as FormValues;
+    try {
+      setOperationInProgress(true);
+      setLoading(true);
+      setResults([]);
+      setShowResults(false);
 
-            if (addresses.length === 0) {
-              throw new Error("No valid wallet addresses found");
-            }
+      // For balance checking, we only need addresses
+      if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
+        // Get addresses for selected wallets
+        const addresses: string[] = selectedWallets.map(walletId => {
+          const wallet = wallets.find(w => w.id === walletId);
+          return wallet ? wallet.address : "";
+        }).filter(address => address !== "");
 
-            // Reset progress
-            setProgress({ current: 0, total: addresses.length });
-
-            // Check balances with progress tracking
-            const operationResults = await bulkCheckNativeBalance(
-              addresses, 
-              values.rpcUrl,
-              (current, total) => setProgress({ current, total })
-            );
-            setResults(operationResults);
-            setShowResults(true);
-            return;
-          }
-
-          // For other operations, we need private keys
-          const privateKeys: string[] = [];
-          for (const walletId of selectedWallets) {
-            const wallet = wallets.find(w => w.id === walletId);
-            
-            // Skip watch-only wallets for operations that require private keys
-            if (wallet?.isWatchOnly) {
-              continue;
-            }
-            
-            const decryptedWallet = await getDecryptedWallet(walletId);
-            if (decryptedWallet) {
-              privateKeys.push(decryptedWallet.privateKey);
-            }
-          }
-
-          if (privateKeys.length === 0) {
-            throw new Error("No valid wallets with private keys selected");
-          }
-
-          // Prepare transaction parameters
-          const params: TransactionParams = {
-            to: values.to,
-            value: values.value,
-            gasLimit: values.gasLimit,
-            gasPrice: values.gasPrice,
-            tokenAddress: values.tokenAddress,
-            data: values.data,
-          };
-
-          // Reset progress
-          setProgress({ current: 0, total: privateKeys.length });
-
-          // Execute the operation based on the selected type with progress tracking
-          let operationResults: BulkOperationResult[] = [];
-          
-          switch (operationType) {
-            case OperationType.SEND:
-              operationResults = await bulkSend(
-                privateKeys, 
-                params, 
-                values.rpcUrl,
-                (current, total) => setProgress({ current, total })
-              );
-              break;
-            case OperationType.TRANSFER_TOKEN:
-              operationResults = await bulkTransferToken(
-                privateKeys, 
-                params, 
-                values.rpcUrl,
-                (current, total) => setProgress({ current, total })
-              );
-              break;
-            case OperationType.APPROVE_TOKEN:
-              operationResults = await bulkApproveToken(
-                privateKeys, 
-                params, 
-                values.rpcUrl,
-                (current, total) => setProgress({ current, total })
-              );
-              break;
-            case OperationType.CUSTOM:
-              operationResults = await bulkCustomTransaction(
-                privateKeys, 
-                params, 
-                values.rpcUrl,
-                (current, total) => setProgress({ current, total })
-              );
-              break;
-          }
-
-          setResults(operationResults);
-          setShowResults(true);
-        } catch (error) {
-          Modal.error({
-            title: "Operation Failed",
-            content: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          });
-        } finally {
-          setLoading(false);
+        if (addresses.length === 0) {
+          throw new Error("No valid wallet addresses found");
         }
-      },
-    });
+
+        // Reset progress
+        setProgress({ current: 0, total: addresses.length });
+
+        // Check balances with progress tracking
+        const operationResults = await bulkCheckNativeBalance(
+          addresses, 
+          values.rpcUrl,
+          (current, total) => setProgress({ current, total })
+        );
+        setResults(operationResults);
+        setShowResults(true);
+        return;
+      }
+
+      // For other operations, we need private keys
+      const privateKeys: string[] = [];
+      for (const walletId of selectedWallets) {
+        const wallet = wallets.find(w => w.id === walletId);
+        
+        // Skip watch-only wallets for operations that require private keys
+        if (wallet?.isWatchOnly) {
+          continue;
+        }
+        
+        const decryptedWallet = await getDecryptedWallet(walletId);
+        if (decryptedWallet) {
+          privateKeys.push(decryptedWallet.privateKey);
+        }
+      }
+
+      if (privateKeys.length === 0) {
+        throw new Error("No valid wallets with private keys selected");
+      }
+
+      // Prepare transaction parameters
+      const params: TransactionParams = {
+        to: values.to,
+        value: values.value,
+        gasLimit: values.gasLimit,
+        gasPrice: values.gasPrice,
+        tokenAddress: values.tokenAddress,
+        data: values.data,
+      };
+
+      // Reset progress
+      setProgress({ current: 0, total: privateKeys.length });
+
+      // Execute the operation based on the selected type with progress tracking
+      let operationResults: BulkOperationResult[] = [];
+      
+      switch (operationType) {
+        case OperationType.SEND:
+          operationResults = await bulkSend(
+            privateKeys, 
+            params, 
+            values.rpcUrl,
+            (current, total) => setProgress({ current, total })
+          );
+          break;
+        case OperationType.TRANSFER_TOKEN:
+          operationResults = await bulkTransferToken(
+            privateKeys, 
+            params, 
+            values.rpcUrl,
+            (current, total) => setProgress({ current, total })
+          );
+          break;
+        case OperationType.APPROVE_TOKEN:
+          operationResults = await bulkApproveToken(
+            privateKeys, 
+            params, 
+            values.rpcUrl,
+            (current, total) => setProgress({ current, total })
+          );
+          break;
+        case OperationType.CUSTOM:
+          operationResults = await bulkCustomTransaction(
+            privateKeys, 
+            params, 
+            values.rpcUrl,
+            (current, total) => setProgress({ current, total })
+          );
+          break;
+      }
+
+      setResults(operationResults);
+      setShowResults(true);
+    } catch (error) {
+      Modal.error({
+        title: "Operation Failed",
+        content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    } finally {
+      setLoading(false);
+      setOperationInProgress(false);
+      setConfirmModalVisible(false);
+    }
   };
 
   // Define a type for the wallet table record
@@ -668,7 +636,8 @@ const BulkOperations: React.FC = () => {
               </Form.Item>
             </Form>
 
-            {loading && (
+            {/* Progress indicator outside modal (keeping for backward compatibility) */}
+            {loading && !confirmModalVisible && (
               <div style={{ textAlign: "center", margin: "20px 0" }}>
                 <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
                 <div style={{ marginTop: 8 }}>
@@ -678,6 +647,71 @@ const BulkOperations: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Custom Confirm Modal with Progress */}
+            <Modal
+              title="Confirm Operation"
+              open={confirmModalVisible}
+              onOk={() => executeOperation()}
+              onCancel={() => setConfirmModalVisible(false)}
+              confirmLoading={operationInProgress}
+              okButtonProps={{ disabled: operationInProgress }}
+              cancelButtonProps={{ disabled: operationInProgress }}
+              closable={!operationInProgress}
+              maskClosable={!operationInProgress}
+            >
+              <div>
+                <Paragraph>
+                  You are about to perform a bulk operation on {selectedWallets.length} wallet(s).
+                  This action cannot be undone.
+                </Paragraph>
+                <Paragraph>
+                  <Text strong>Operation:</Text>{" "}
+                  {operationType === OperationType.SEND
+                    ? "Send Native Tokens"
+                    : operationType === OperationType.TRANSFER_TOKEN
+                    ? "Transfer Tokens"
+                    : operationType === OperationType.APPROVE_TOKEN
+                    ? "Approve Tokens"
+                    : operationType === OperationType.CHECK_NATIVE_BALANCE
+                    ? "Check Native Balance"
+                    : "Custom Transaction"}
+                </Paragraph>
+                <Paragraph>
+                  <Text strong>Network:</Text> {form.getFieldValue("network") === "custom" ? "Custom RPC" : form.getFieldValue("network")}
+                </Paragraph>
+                {operationType !== OperationType.CHECK_NATIVE_BALANCE && (
+                  <Paragraph>
+                    <Text strong>To Address:</Text> {form.getFieldValue("to")}
+                  </Paragraph>
+                )}
+                {form.getFieldValue("value") && (
+                  <Paragraph>
+                    <Text strong>Value:</Text> {form.getFieldValue("value")}
+                  </Paragraph>
+                )}
+                {form.getFieldValue("tokenAddress") && (
+                  <Paragraph>
+                    <Text strong>Token Address:</Text> {form.getFieldValue("tokenAddress")}
+                  </Paragraph>
+                )}
+                
+                {/* Progress indicator inside modal */}
+                {operationInProgress && progress && (
+                  <div style={{ marginTop: 24, textAlign: "center" }}>
+                    <Progress 
+                      percent={Math.round((progress.current / progress.total) * 100)} 
+                      status="active"
+                      style={{ marginBottom: 12 }}
+                    />
+                    <div>
+                      <Spin indicator={<LoadingOutlined style={{ fontSize: 16 }} spin />} style={{ marginRight: 8 }} />
+                      Processing transactions... {progress.current}/{progress.total} wallets
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Modal>
 
             {showResults && (
               <>
