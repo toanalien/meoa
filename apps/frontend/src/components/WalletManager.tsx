@@ -117,8 +117,8 @@ const WalletManager: React.FC = () => {
   };
 
   // Handle creating a new wallet
-  const handleCreateWallet = async (values: { name?: string }) => {
-    await addWallet(values.name);
+  const handleCreateWallet = async (values: { name?: string; count?: number }) => {
+    await addWallet(values.name, values.count);
     setIsCreateModalVisible(false);
     createForm.resetFields();
   };
@@ -371,6 +371,17 @@ const WalletManager: React.FC = () => {
             rules={[{ required: false }]}
           >
             <Input placeholder="Enter a name or leave empty for auto-generated name" />
+          </Form.Item>
+          <Form.Item
+            name="count"
+            label="Number of Wallets"
+            initialValue={1}
+            rules={[
+              { required: true, message: "Please enter the number of wallets" },
+              { type: "number", min: 1, max: 100, message: "Must be between 1 and 100" }
+            ]}
+          >
+            <Input type="number" min={1} max={100} />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" block>

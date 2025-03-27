@@ -18,7 +18,7 @@ interface WalletContextType {
   wallets: Wallet[];
   masterPassword: string | null;
   setMasterPassword: (password: string) => void;
-  addWallet: (name?: string) => Promise<Wallet | null>;
+  addWallet: (name?: string, count?: number) => Promise<Wallet[] | null>;
   importWallet: (name: string | undefined, privateKey: string) => Promise<Wallet | null>;
   importWatchOnlyWallet: (name: string | undefined, address: string) => Promise<Wallet | null>;
   bulkImportWallets: (inputs: string[], onProgress?: ProgressCallback) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
@@ -243,31 +243,47 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     return `${typePrefix}${highestNumber + 1}`;
   };
 
-  const addWallet = async (name?: string): Promise<Wallet | null> => {
+  const addWallet = async (name?: string, count: number = 1): Promise<Wallet[] | null> => {
     if (!masterPassword) {
       message.error("Master password not set");
       return null;
     }
 
     try {
-      const newWallet = generateWallet();
-      const encryptedPrivateKey = await encryptWallet(newWallet.privateKey, masterPassword);
+      const createdWallets: Wallet[] = [];
       
-      // Use provided name or generate one
-      const walletName = name?.trim() ? name : generateWalletName("Generated");
-      
-      const wallet: Wallet = {
-        id: Date.now().toString(),
-        name: walletName,
-        address: newWallet.address,
-        encryptedPrivateKey,
-      };
+      for (let i = 0; i < count; i++) {
+        const newWallet = generateWallet();
+        const encryptedPrivateKey = await encryptWallet(newWallet.privateKey, masterPassword);
+        
+        // Use provided name or generate one
+        let walletName = name?.trim() ? name : generateWalletName("Generated");
+        
+        // If creating multiple wallets and a name is provided, append the index
+        if (count > 1 && name?.trim()) {
+          walletName = `${walletName} #${i + 1}`;
+        }
+        
+        const wallet: Wallet = {
+          id: Date.now().toString() + i, // Ensure unique ID
+          name: walletName,
+          address: newWallet.address,
+          encryptedPrivateKey,
+        };
+        
+        createdWallets.push(wallet);
+      }
 
-      const updatedWallets = [...wallets, wallet];
+      const updatedWallets = [...wallets, ...createdWallets];
       setWallets(updatedWallets);
       saveWalletsToLocalStorage(updatedWallets);
-      message.success("Wallet created successfully");
-      return wallet;
+      
+      const successMessage = count === 1 
+        ? "Wallet created successfully" 
+        : `${count} wallets created successfully`;
+      
+      message.success(successMessage);
+      return createdWallets;
     } catch (error) {
       console.error("Failed to create wallet:", error);
       message.error("Failed to create wallet");
