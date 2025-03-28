@@ -697,10 +697,10 @@ const WalletManager: React.FC = () => {
       {/* Removed individual watch-only wallet modal */}
 
       {/* Main Content */}
-      <Card
-        title="Wallet Management"
-        extra={
-          <Space>
+      <Card title="Wallet Management">
+        {/* Action Buttons */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             <Button
               type="primary"
               icon={<LockOutlined />}
@@ -721,7 +721,6 @@ const WalletManager: React.FC = () => {
             >
               Create Wallet
             </Button>
-            {/* Removed individual import wallet button */}
             <Button
               icon={<EyeOutlined />}
               onClick={() => {
@@ -743,9 +742,8 @@ const WalletManager: React.FC = () => {
             >
               Bulk Import
             </Button>
-          </Space>
-        }
-      >
+          </div>
+        </div>
         {wallets.length === 0 ? (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
             <Text type="secondary">No wallets yet. Create or import a wallet to get started.</Text>
