@@ -548,7 +548,7 @@ const BulkOperations: React.FC = () => {
         title: "Txns",
         dataIndex: "txCount",
         key: "txCount",
-        render: (count: any) => (
+        render: (count: string | number | undefined) => (
           <Text>{count !== undefined ? count : "-"}</Text>
         ),
       });

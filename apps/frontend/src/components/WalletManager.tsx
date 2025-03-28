@@ -25,7 +25,8 @@ import {
   FileTextOutlined,
 } from "@ant-design/icons";
 import { useWallet, Wallet } from "@/utils/WalletContext";
-import { detectWalletInputType, createWalletFromInput } from "@/utils/walletUtils";
+// Removed unused imports
+// import { detectWalletInputType, createWalletFromInput } from "@/utils/walletUtils";
 
 const { Text, Paragraph } = Typography;
 
@@ -35,7 +36,7 @@ const WalletManager: React.FC = () => {
     masterPassword,
     setMasterPassword,
     addWallet,
-    importWallet,
+    // importWallet, // Unused variable
     // importWatchOnlyWallet removed as it's no longer used
     bulkImportWallets,
     bulkImportWatchOnlyWallets,
@@ -322,7 +323,7 @@ const WalletManager: React.FC = () => {
         <Form form={passwordForm} onFinish={handleSetPassword} layout="vertical">
           <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
             <strong>IMPORTANT DISCLAIMER:</strong><br />
-            This password is used to encrypt and decrypt your wallet's private keys and cannot be recovered if lost or forgotten. By choosing a password, you acknowledge that you alone are responsible for managing your wallet security and private keys. The author assumes no liability for any loss of assets or user input arising from password mismanagement or other security issues.
+            This password is used to encrypt and decrypt your wallet&apos;s private keys and cannot be recovered if lost or forgotten. By choosing a password, you acknowledge that you alone are responsible for managing your wallet security and private keys. The author assumes no liability for any loss of assets or user input arising from password mismanagement or other security issues.
           </Paragraph>
           <Form.Item
             name="password"
