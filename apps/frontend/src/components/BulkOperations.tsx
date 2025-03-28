@@ -33,9 +33,11 @@ import {
   bulkApproveToken,
   bulkCustomTransaction,
   bulkCheckNativeBalance,
+  bulkCheckTokenBalance,
   getExplorerUrl,
   TransactionParams,
   BulkOperationResult,
+  USDT_ADDRESSES,
 } from "@/utils/blockchainUtils";
 
 const { Title, Text, Paragraph } = Typography;
@@ -59,6 +61,7 @@ enum OperationType {
   APPROVE_TOKEN = "approve_token",
   CUSTOM = "custom",
   CHECK_NATIVE_BALANCE = "check_native_balance",
+  CHECK_TOKEN_BALANCE = "check_token_balance",
 }
 
 const BulkOperations: React.FC = () => {
@@ -273,6 +276,27 @@ const BulkOperations: React.FC = () => {
   const handleOperationTypeChange = (value: OperationType) => {
     setOperationType(value);
     form.resetFields(["tokenAddress", "data"]);
+    
+    // Set default token address for CHECK_TOKEN_BALANCE
+    if (value === OperationType.CHECK_TOKEN_BALANCE) {
+      // Get the network to determine which USDT address to use
+      const network = form.getFieldValue("network");
+      let defaultTokenAddress = USDT_ADDRESSES.ETHEREUM; // Default to Ethereum USDT
+      
+      if (network && network !== "custom") {
+        if (network.includes("binance") || network.includes("bsc")) {
+          defaultTokenAddress = USDT_ADDRESSES.BSC;
+        } else if (network.includes("polygon")) {
+          defaultTokenAddress = USDT_ADDRESSES.POLYGON;
+        } else if (network.includes("arbitrum")) {
+          defaultTokenAddress = USDT_ADDRESSES.ARBITRUM;
+        } else if (network.includes("optimism")) {
+          defaultTokenAddress = USDT_ADDRESSES.OPTIMISM;
+        }
+      }
+      
+      form.setFieldsValue({ tokenAddress: defaultTokenAddress });
+    }
   };
 
   // Handle network selection change
@@ -283,6 +307,23 @@ const BulkOperations: React.FC = () => {
       const network = NETWORKS.find((n) => n.rpcUrl === value);
       if (network) {
         form.setFieldsValue({ rpcUrl: network.rpcUrl });
+      }
+      
+      // Update token address if CHECK_TOKEN_BALANCE is selected
+      if (operationType === OperationType.CHECK_TOKEN_BALANCE) {
+        let defaultTokenAddress = USDT_ADDRESSES.ETHEREUM; // Default to Ethereum USDT
+        
+        if (value.includes("binance") || value.includes("bsc")) {
+          defaultTokenAddress = USDT_ADDRESSES.BSC;
+        } else if (value.includes("polygon")) {
+          defaultTokenAddress = USDT_ADDRESSES.POLYGON;
+        } else if (value.includes("arbitrum")) {
+          defaultTokenAddress = USDT_ADDRESSES.ARBITRUM;
+        } else if (value.includes("optimism")) {
+          defaultTokenAddress = USDT_ADDRESSES.OPTIMISM;
+        }
+        
+        form.setFieldsValue({ tokenAddress: defaultTokenAddress });
       }
     }
   };
@@ -331,8 +372,9 @@ const BulkOperations: React.FC = () => {
       setResults([]);
       setShowResults(false);
 
-      // For balance checking, we only need addresses
-      if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
+      // For balance checking operations, we only need addresses
+      if (operationType === OperationType.CHECK_NATIVE_BALANCE || 
+          operationType === OperationType.CHECK_TOKEN_BALANCE) {
         // Get addresses for selected wallets
         const addresses: string[] = selectedWallets.map(walletId => {
           const wallet = wallets.find(w => w.id === walletId);
@@ -347,11 +389,28 @@ const BulkOperations: React.FC = () => {
         setProgress({ current: 0, total: addresses.length });
 
         // Check balances with progress tracking
-        const operationResults = await bulkCheckNativeBalance(
-          addresses, 
-          values.rpcUrl,
-          (current, total) => setProgress({ current, total })
-        );
+        let operationResults: BulkOperationResult[];
+        
+        if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
+          operationResults = await bulkCheckNativeBalance(
+            addresses, 
+            values.rpcUrl,
+            (current, total) => setProgress({ current, total })
+          );
+        } else {
+          // Must be CHECK_TOKEN_BALANCE
+          if (!values.tokenAddress) {
+            throw new Error("Token address is required for token balance check");
+          }
+          
+          operationResults = await bulkCheckTokenBalance(
+            addresses,
+            values.tokenAddress,
+            values.rpcUrl,
+            (current, total) => setProgress({ current, total })
+          );
+        }
+        
         setResults(operationResults);
         setShowResults(true);
         return;
@@ -533,16 +592,38 @@ const BulkOperations: React.FC = () => {
       },
     ];
 
-    // Add balance and transaction count columns for native balance check operation
-    if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
-      baseColumns.push({
-        title: "Balance",
-        dataIndex: "balance",
-        key: "balance",
-        render: (text: string) => (
-          <Text>{text ? `${text} ETH` : "-"}</Text>
-        ),
-      });
+    // Add balance and transaction count columns for balance check operations
+    if (operationType === OperationType.CHECK_NATIVE_BALANCE || 
+        operationType === OperationType.CHECK_TOKEN_BALANCE) {
+      
+      if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
+        baseColumns.push({
+          title: "Balance",
+          dataIndex: "balance",
+          key: "balance",
+          render: (text: string) => {
+            if (!text) return <Text>-</Text>;
+            return <Text>{text} ETH</Text>;
+          },
+        });
+      } else {
+        // For token balance check
+        baseColumns.push({
+          title: "Balance",
+          dataIndex: "balance",
+          key: "balance",
+          render: (text: string) => {
+            // Since we can't access the record directly, we need to check if we're in token balance mode
+            if (!text) return <Text>-</Text>;
+            
+            // Find the token symbol from the results array for this balance
+            const result = results.find(r => r.balance === text);
+            const tokenSymbol = result?.tokenSymbol || "";
+            
+            return <Text>{text} {tokenSymbol}</Text>;
+          },
+        });
+      }
       
       baseColumns.push({
         title: "Txns",
@@ -692,6 +773,12 @@ const BulkOperations: React.FC = () => {
                       <Tag color="blue" style={{ marginLeft: 8 }}>Safe</Tag>
                     </Space>
                   </Option>
+                  <Option value={OperationType.CHECK_TOKEN_BALANCE}>
+                    <Space>
+                      Check Token Balance
+                      <Tag color="blue" style={{ marginLeft: 8 }}>Safe</Tag>
+                    </Space>
+                  </Option>
                 </Select>
               </Form.Item>
 
@@ -718,7 +805,8 @@ const BulkOperations: React.FC = () => {
                 <Input placeholder="e.g., https://eth.llamarpc.com" />
               </Form.Item>
 
-              {operationType !== OperationType.CHECK_NATIVE_BALANCE && (
+              {operationType !== OperationType.CHECK_NATIVE_BALANCE && 
+               operationType !== OperationType.CHECK_TOKEN_BALANCE && (
                 <Form.Item
                   name="to"
                   label="To Address"
@@ -753,7 +841,8 @@ const BulkOperations: React.FC = () => {
               )}
 
               {(operationType === OperationType.TRANSFER_TOKEN ||
-                operationType === OperationType.APPROVE_TOKEN) && (
+                operationType === OperationType.APPROVE_TOKEN ||
+                operationType === OperationType.CHECK_TOKEN_BALANCE) && (
                 <Form.Item
                   name="tokenAddress"
                   label="Token Contract Address"
@@ -799,7 +888,8 @@ const BulkOperations: React.FC = () => {
                   loading={loading}
                   disabled={selectedWallets.length === 0}
                 >
-                  {operationType === OperationType.CHECK_NATIVE_BALANCE
+                  {operationType === OperationType.CHECK_NATIVE_BALANCE || 
+                   operationType === OperationType.CHECK_TOKEN_BALANCE
                     ? "Check Balances"
                     : "Execute Operation"}
                 </Button>
@@ -845,12 +935,15 @@ const BulkOperations: React.FC = () => {
                     ? "Approve Tokens"
                     : operationType === OperationType.CHECK_NATIVE_BALANCE
                     ? "Check Native Balance"
+                    : operationType === OperationType.CHECK_TOKEN_BALANCE
+                    ? "Check Token Balance"
                     : "Custom Transaction"}
                 </Paragraph>
                 <Paragraph>
                   <Text strong>Network:</Text> {form.getFieldValue("network") === "custom" ? "Custom RPC" : form.getFieldValue("network")}
                 </Paragraph>
-                {operationType !== OperationType.CHECK_NATIVE_BALANCE && (
+                {operationType !== OperationType.CHECK_NATIVE_BALANCE && 
+                 operationType !== OperationType.CHECK_TOKEN_BALANCE && (
                   <Paragraph>
                     <Text strong>To Address:</Text> {form.getFieldValue("to")}
                   </Paragraph>

@@ -1,5 +1,14 @@
 import { ethers, Wallet, Contract } from "ethers";
 
+// USDT contract addresses for different networks
+export const USDT_ADDRESSES = {
+  ETHEREUM: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+  BSC: "0x55d398326f99059ff775485246999027b3197955", // BSC USDT (BUSD)
+  POLYGON: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+  ARBITRUM: "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
+  OPTIMISM: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
+};
+
 /**
  * Returns the appropriate blockchain explorer URL for a given network and address
  * @param rpcUrl The RPC URL for the network
@@ -52,6 +61,8 @@ export interface BulkOperationResult {
   error?: string;
   balance?: string; // Added for balance check operations
   txCount?: number; // Transaction count for the wallet
+  tokenSymbol?: string; // Added for token balance check operations
+  tokenDecimals?: number; // Added for token balance check operations
 }
 
 // Progress callback type
@@ -390,6 +401,81 @@ export async function bulkCheckNativeBalance(
         walletAddress: address,
         success: false,
         error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Checks token balances for multiple wallets in bulk
+ * @param addresses Array of wallet addresses
+ * @param tokenAddress The token contract address
+ * @param rpcUrl The RPC URL for the network
+ * @param onProgress Optional callback for progress updates
+ * @returns Array of operation results with wallet addresses and token balances
+ */
+export async function bulkCheckTokenBalance(
+  addresses: string[],
+  tokenAddress: string,
+  rpcUrl: string,
+  onProgress?: ProgressCallback
+): Promise<BulkOperationResult[]> {
+  const provider = createProvider(rpcUrl);
+  const results: BulkOperationResult[] = [];
+  const total = addresses.length;
+
+  try {
+    // Initialize token contract
+    const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
+    
+    // Get token metadata
+    const [symbol, decimals] = await Promise.all([
+      tokenContract.symbol(),
+      tokenContract.decimals()
+    ]);
+
+    for (let i = 0; i < addresses.length; i++) {
+      const address = addresses[i];
+      
+      // Update progress
+      if (onProgress) {
+        onProgress(i + 1, total);
+      }
+      
+      try {
+        // Get token balance and transaction count in parallel
+        const [balance, txCount] = await Promise.all([
+          tokenContract.balanceOf(address),
+          provider.getTransactionCount(address)
+        ]);
+        
+        results.push({
+          walletAddress: address,
+          success: true,
+          balance: ethers.formatUnits(balance, decimals),
+          txCount: txCount,
+          tokenSymbol: symbol,
+          tokenDecimals: decimals
+        });
+      } catch (error) {
+        console.error(`Error checking token balance for wallet:`, error);
+        results.push({
+          walletAddress: address,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  } catch (error) {
+    console.error(`Error initializing token contract:`, error);
+    // If token contract initialization fails, mark all addresses as failed
+    for (const address of addresses) {
+      results.push({
+        walletAddress: address,
+        success: false,
+        error: `Token contract error: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
   }
