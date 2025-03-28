@@ -65,7 +65,7 @@ const BulkOperations: React.FC = () => {
   const { wallets, getDecryptedWallet, masterPassword } = useWallet();
   const [form] = Form.useForm();
   const [selectedWallets, setSelectedWallets] = useState<string[]>([]);
-  const [operationType, setOperationType] = useState<OperationType>(OperationType.SEND);
+  const [operationType, setOperationType] = useState<OperationType>(OperationType.CHECK_NATIVE_BALANCE);
   const [loading, setLoading] = useState<boolean>(false);
   const [results, setResults] = useState<BulkOperationResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
@@ -257,7 +257,7 @@ const BulkOperations: React.FC = () => {
   useEffect(() => {
     if (typeof window !== "undefined") {
       form.setFieldsValue({
-        operationType: OperationType.SEND,
+        operationType: OperationType.CHECK_NATIVE_BALANCE,
         network: NETWORKS[0].rpcUrl,
         rpcUrl: NETWORKS[0].rpcUrl,
       });
@@ -655,7 +655,7 @@ const BulkOperations: React.FC = () => {
               layout="vertical"
               onFinish={handleExecuteOperation}
               initialValues={{
-                operationType: OperationType.SEND,
+                operationType: OperationType.CHECK_NATIVE_BALANCE,
                 network: NETWORKS[0].rpcUrl,
                 rpcUrl: NETWORKS[0].rpcUrl,
               }}
