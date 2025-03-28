@@ -257,11 +257,24 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         const encryptedPrivateKey = await encryptWallet(newWallet.privateKey, masterPassword);
         
         // Use provided name or generate one
-        let walletName = name?.trim() ? name : generateWalletName("Generated");
+        let walletName;
         
-        // If creating multiple wallets and a name is provided, append the index
-        if (count > 1 && name?.trim()) {
-          walletName = `${walletName} #${i + 1}`;
+        if (name?.trim()) {
+          // If a custom name is provided
+          walletName = name.trim();
+          // If creating multiple wallets, append the index
+          if (count > 1) {
+            walletName = `${walletName} #${i + 1}`;
+          }
+        } else {
+          // If no custom name is provided
+          if (count > 1) {
+            // For multiple wallets, use sequential numbering
+            walletName = `Generated Wallet #${wallets.length + i + 1}`;
+          } else {
+            // For a single wallet, use the next available number
+            walletName = generateWalletName("Generated");
+          }
         }
         
         const wallet: Wallet = {

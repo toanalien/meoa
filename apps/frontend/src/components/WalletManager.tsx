@@ -13,6 +13,7 @@ import {
   Checkbox,
   Tabs,
   Spin,
+  InputNumber,
 } from "antd";
 import {
   PlusOutlined,
@@ -119,9 +120,31 @@ const WalletManager: React.FC = () => {
 
   // Handle creating a new wallet
   const handleCreateWallet = async (values: { name?: string; count?: number }) => {
-    await addWallet(values.name, values.count);
-    setIsCreateModalVisible(false);
-    createForm.resetFields();
+    // Log the values received from the form
+    console.log("Form values:", values);
+    
+    // Ensure count is a number and within valid range
+    let count = 1;
+    if (values.count !== undefined) {
+      count = Number(values.count);
+      // Additional validation to ensure count is within range
+      if (isNaN(count) || count < 1) {
+        count = 1;
+      } else if (count > 100) {
+        count = 100;
+      }
+    }
+    
+    console.log("Using count:", count);
+    
+    try {
+      await addWallet(values.name, count);
+      setIsCreateModalVisible(false);
+      createForm.resetFields();
+    } catch (error) {
+      console.error("Error creating wallet:", error);
+      message.error("Failed to create wallet");
+    }
   };
 
   // Removed individual import wallet handler
@@ -365,7 +388,12 @@ const WalletManager: React.FC = () => {
         onCancel={() => setIsCreateModalVisible(false)}
         footer={null}
       >
-        <Form form={createForm} onFinish={handleCreateWallet} layout="vertical">
+        <Form 
+          form={createForm} 
+          onFinish={handleCreateWallet} 
+          layout="vertical"
+          validateMessages={{ required: '${label} is required' }}
+        >
           <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
             <strong>IMPORTANT DISCLAIMER:</strong><br />
             By creating a wallet, you acknowledge that you alone are responsible for securing your wallet and private keys. The author assumes no liability for any loss of assets or user input arising from wallet management or other security issues.
@@ -383,10 +411,21 @@ const WalletManager: React.FC = () => {
             initialValue={1}
             rules={[
               { required: true, message: "Please enter the number of wallets" },
-              { type: "number", min: 1, max: 100, message: "Must be between 1 and 100" }
+              { 
+                validator: (_, value) => {
+                  const num = Number(value);
+                  if (isNaN(num)) {
+                    return Promise.reject("Please enter a valid number");
+                  }
+                  if (num < 1 || num > 100) {
+                    return Promise.reject("Must be between 1 and 100");
+                  }
+                  return Promise.resolve();
+                }
+              }
             ]}
           >
-            <Input type="number" min={1} max={100} />
+            <InputNumber min={1} max={100} style={{ width: '100%' }} precision={0} />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
