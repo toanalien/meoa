@@ -1,13 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { message } from "antd";
 import { encryptWallet, decryptWallet, generateWallet } from "@/utils/walletUtils";
+import { 
+  generateSolanaWallet, 
+  encryptSolanaWallet, 
+  decryptSolanaWallet,
+  isValidSolanaAddress 
+} from "@/utils/solanaWalletUtils";
 import CryptoJS from "crypto-js";
+
+export type BlockchainType = "ethereum" | "solana";
 
 export interface Wallet {
   id: string;
   name: string;
   address: string;
   encryptedPrivateKey: string;
+  blockchain: BlockchainType;
   isWatchOnly?: boolean;
 }
 
@@ -282,6 +291,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           name: walletName,
           address: newWallet.address,
           encryptedPrivateKey,
+          blockchain: "ethereum",
         };
         
         createdWallets.push(wallet);
@@ -324,6 +334,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         name: walletName,
         address,
         encryptedPrivateKey,
+        blockchain: "ethereum",
       };
 
       const updatedWallets = [...wallets, wallet];
@@ -377,6 +388,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           name: generateWalletName("Imported"), // Auto-generate name
           address: walletData.address,
           encryptedPrivateKey,
+          blockchain: "ethereum",
         };
         
         results.wallets.push(wallet);
@@ -426,6 +438,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         name: walletName,
         address,
         encryptedPrivateKey: "", // Empty for watch-only wallets
+        blockchain: "ethereum",
         isWatchOnly: true,
       };
 
@@ -504,6 +517,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           name: walletName,
           address,
           encryptedPrivateKey: "", // Empty for watch-only wallets
+          blockchain: "ethereum",
           isWatchOnly: true,
         };
         

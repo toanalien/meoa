@@ -787,6 +787,9 @@ const WalletManager: React.FC = () => {
                   title={
                     <Space>
                       {wallet.name}
+                      <Text type="secondary" style={{ fontSize: "0.8rem", textTransform: "uppercase" }}>
+                        {wallet.blockchain || "ETH"}
+                      </Text>
                       {wallet.isWatchOnly && (
                         <Tooltip title="Watch-only wallet">
                           <Text type="secondary" style={{ fontSize: "0.85rem" }}>
