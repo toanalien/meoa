@@ -14,6 +14,8 @@ import {
   Tabs,
   Spin,
   InputNumber,
+  Select,
+  Tag,
 } from "antd";
 import {
   PlusOutlined,
@@ -25,7 +27,7 @@ import {
   UploadOutlined,
   FileTextOutlined,
 } from "@ant-design/icons";
-import { useWallet, Wallet } from "@/utils/WalletContext";
+import { useWallet, Wallet, BlockchainType } from "@/utils/WalletContext";
 // Removed unused imports
 // import { detectWalletInputType, createWalletFromInput } from "@/utils/walletUtils";
 
@@ -65,6 +67,7 @@ const WalletManager: React.FC = () => {
   const [recommendPassword, setRecommendPassword] = useState<boolean>(false);
   const [bulkImportLoading, setBulkImportLoading] = useState<boolean>(false);
   const [activeImportTab, setActiveImportTab] = useState<string>("textbox");
+  const [selectedBlockchain, setSelectedBlockchain] = useState<BlockchainType>("ethereum");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const watchOnlyFileInputRef = useRef<HTMLInputElement>(null);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
@@ -119,7 +122,7 @@ const WalletManager: React.FC = () => {
   };
 
   // Handle creating a new wallet
-  const handleCreateWallet = async (values: { name?: string; count?: number }) => {
+  const handleCreateWallet = async (values: { name?: string; count?: number; blockchain?: BlockchainType }) => {
     // Log the values received from the form
     console.log("Form values:", values);
     
@@ -135,12 +138,16 @@ const WalletManager: React.FC = () => {
       }
     }
     
-    console.log("Using count:", count);
+    // Use selected blockchain from form or default to ethereum
+    const blockchain = values.blockchain || selectedBlockchain;
+    
+    console.log("Using count:", count, "blockchain:", blockchain);
     
     try {
-      await addWallet(values.name, count);
+      await addWallet(values.name, count, blockchain);
       setIsCreateModalVisible(false);
       createForm.resetFields();
+      setSelectedBlockchain("ethereum"); // Reset to default
     } catch (error) {
       console.error("Error creating wallet:", error);
       message.error("Failed to create wallet");
@@ -179,7 +186,7 @@ const WalletManager: React.FC = () => {
   };
 
   // Handle bulk import from text input
-  const handleBulkImportFromText = async (values: { walletInputs: string }) => {
+  const handleBulkImportFromText = async (values: { walletInputs: string; blockchain?: BlockchainType }) => {
     if (!masterPassword) {
       message.error("Master password not set");
       return;
@@ -192,18 +199,22 @@ const WalletManager: React.FC = () => {
       return;
     }
 
+    const blockchain = values.blockchain || selectedBlockchain;
+
     setBulkImportLoading(true);
     setImportProgress(null);
     
     try {
       const result = await bulkImportWallets(
         lines,
-        (current, total) => setImportProgress({ current, total })
+        (current, total) => setImportProgress({ current, total }),
+        blockchain
       );
       
       if (result.success > 0) {
         setIsBulkImportModalVisible(false);
         bulkImportForm.resetFields();
+        setSelectedBlockchain("ethereum"); // Reset to default
       }
     } catch (error) {
       console.error("Bulk import error:", error);
@@ -214,7 +225,7 @@ const WalletManager: React.FC = () => {
   };
 
   // Handle bulk import of watch-only wallets from text input
-  const handleBulkWatchOnlyImport = async (values: { addressInputs: string }) => {
+  const handleBulkWatchOnlyImport = async (values: { addressInputs: string; blockchain?: BlockchainType }) => {
     const lines = values.addressInputs.split("\n").filter(line => line.trim() !== "");
     
     if (lines.length === 0) {
@@ -222,18 +233,22 @@ const WalletManager: React.FC = () => {
       return;
     }
 
+    const blockchain = values.blockchain || selectedBlockchain;
+
     setBulkImportLoading(true);
     setImportProgress(null);
     
     try {
       const result = await bulkImportWatchOnlyWallets(
         lines,
-        (current, total) => setImportProgress({ current, total })
+        (current, total) => setImportProgress({ current, total }),
+        blockchain
       );
       
       if (result.success > 0) {
         setIsBulkWatchOnlyModalVisible(false);
         bulkWatchOnlyForm.resetFields();
+        setSelectedBlockchain("ethereum"); // Reset to default
       }
     } catch (error) {
       console.error("Bulk watch-only import error:", error);
@@ -406,6 +421,22 @@ const WalletManager: React.FC = () => {
             <Input placeholder="Enter a name or leave empty for auto-generated name" />
           </Form.Item>
           <Form.Item
+            name="blockchain"
+            label="Blockchain"
+            initialValue={selectedBlockchain}
+            rules={[{ required: true, message: "Please select a blockchain" }]}
+          >
+            <Select
+              value={selectedBlockchain}
+              onChange={(value) => setSelectedBlockchain(value)}
+              options={[
+                { label: "Ethereum (ETH)", value: "ethereum" },
+                { label: "Solana (SOL)", value: "solana" },
+                { label: "SUI", value: "sui" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
             name="count"
             label="Number of Wallets"
             initialValue={1}
@@ -531,6 +562,22 @@ const WalletManager: React.FC = () => {
               children: (
                 <Form form={bulkImportForm} layout="vertical" onFinish={handleBulkImportFromText}>
                   <Form.Item
+                    name="blockchain"
+                    label="Blockchain"
+                    initialValue={selectedBlockchain}
+                    rules={[{ required: true, message: "Please select a blockchain" }]}
+                  >
+                    <Select
+                      value={selectedBlockchain}
+                      onChange={(value) => setSelectedBlockchain(value)}
+                      options={[
+                        { label: "Ethereum (ETH)", value: "ethereum" },
+                        { label: "Solana (SOL)", value: "solana" },
+                        { label: "SUI", value: "sui" },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item
                     name="walletInputs"
                     rules={[{ required: true, message: "Please enter private keys or mnemonic phrases" }]}
                   >
@@ -611,7 +658,7 @@ const WalletManager: React.FC = () => {
       >
         <Paragraph type="warning" style={{ backgroundColor: "#fffbe6", padding: "12px", borderRadius: "4px", border: "1px solid #ffe58f", marginBottom: "16px" }}>
           <strong>IMPORTANT DISCLAIMER:</strong><br />
-          Import multiple watch-only wallets at once by providing a list of Ethereum addresses. Each line will be treated as a separate watch-only wallet. By importing watch-only wallets, you acknowledge that you alone are responsible for managing your wallet addresses. The author assumes no liability for any loss of assets or user input arising from wallet management or other security issues.
+          Import multiple watch-only wallets at once by providing a list of blockchain addresses. Each line will be treated as a separate watch-only wallet. By importing watch-only wallets, you acknowledge that you alone are responsible for managing your wallet addresses. The author assumes no liability for any loss of assets or user input arising from wallet management or other security issues.
         </Paragraph>
         
         <Tabs
@@ -628,11 +675,33 @@ const WalletManager: React.FC = () => {
               children: (
                 <Form form={bulkWatchOnlyForm} layout="vertical" onFinish={handleBulkWatchOnlyImport}>
                   <Form.Item
+                    name="blockchain"
+                    label="Blockchain"
+                    initialValue={selectedBlockchain}
+                    rules={[{ required: true, message: "Please select a blockchain" }]}
+                  >
+                    <Select
+                      value={selectedBlockchain}
+                      onChange={(value) => setSelectedBlockchain(value)}
+                      options={[
+                        { label: "Ethereum (ETH)", value: "ethereum" },
+                        { label: "Solana (SOL)", value: "solana" },
+                        { label: "SUI", value: "sui" },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item
                     name="addressInputs"
-                    rules={[{ required: true, message: "Please enter Ethereum addresses" }]}
+                    rules={[{ required: true, message: "Please enter wallet addresses" }]}
                   >
                     <Input.TextArea
-                      placeholder="Enter one Ethereum address per line (0x...)"
+                      placeholder={
+                        selectedBlockchain === "ethereum" 
+                          ? "Enter one Ethereum address per line (0x...)" 
+                          : selectedBlockchain === "solana"
+                          ? "Enter one Solana address per line (base58...)"
+                          : "Enter one SUI address per line (0x...)"
+                      }
                       rows={10}
                       style={{ fontFamily: "monospace" }}
                     />
@@ -787,14 +856,21 @@ const WalletManager: React.FC = () => {
                   title={
                     <Space>
                       {wallet.name}
-                      <Text type="secondary" style={{ fontSize: "0.8rem", textTransform: "uppercase" }}>
-                        {wallet.blockchain || "ETH"}
-                      </Text>
+                      {wallet.blockchain === "ethereum" && (
+                        <Tag color="blue">ETH</Tag>
+                      )}
+                      {wallet.blockchain === "solana" && (
+                        <Tag color="purple">SOL</Tag>
+                      )}
+                      {wallet.blockchain === "sui" && (
+                        <Tag color="cyan">SUI</Tag>
+                      )}
+                      {!wallet.blockchain && (
+                        <Tag color="blue">ETH</Tag>
+                      )}
                       {wallet.isWatchOnly && (
                         <Tooltip title="Watch-only wallet">
-                          <Text type="secondary" style={{ fontSize: "0.85rem" }}>
-                            (Watch-only)
-                          </Text>
+                          <Tag color="orange">Watch-only</Tag>
                         </Tooltip>
                       )}
                     </Space>
