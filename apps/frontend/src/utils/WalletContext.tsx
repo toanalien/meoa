@@ -7,9 +7,14 @@ import {
   decryptSolanaWallet,
   isValidSolanaAddress 
 } from "@/utils/solanaWalletUtils";
+import {
+  generateSuiWallet,
+  encryptSuiWallet,
+  decryptSuiWallet,
+} from "@/utils/suiWalletUtils";
 import CryptoJS from "crypto-js";
 
-export type BlockchainType = "ethereum" | "solana";
+export type BlockchainType = "ethereum" | "solana" | "sui";
 
 export interface Wallet {
   id: string;
@@ -27,11 +32,11 @@ interface WalletContextType {
   wallets: Wallet[];
   masterPassword: string | null;
   setMasterPassword: (password: string) => void;
-  addWallet: (name?: string, count?: number) => Promise<Wallet[] | null>;
-  importWallet: (name: string | undefined, privateKey: string) => Promise<Wallet | null>;
-  importWatchOnlyWallet: (name: string | undefined, address: string) => Promise<Wallet | null>;
-  bulkImportWallets: (inputs: string[], onProgress?: ProgressCallback) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
-  bulkImportWatchOnlyWallets: (addresses: string[], onProgress?: ProgressCallback) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
+  addWallet: (name?: string, count?: number, blockchain?: BlockchainType) => Promise<Wallet[] | null>;
+  importWallet: (name: string | undefined, privateKey: string, blockchain?: BlockchainType) => Promise<Wallet | null>;
+  importWatchOnlyWallet: (name: string | undefined, address: string, blockchain?: BlockchainType) => Promise<Wallet | null>;
+  bulkImportWallets: (inputs: string[], onProgress?: ProgressCallback, blockchain?: BlockchainType) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
+  bulkImportWatchOnlyWallets: (addresses: string[], onProgress?: ProgressCallback, blockchain?: BlockchainType) => Promise<{ success: number; failed: number; wallets: Wallet[] }>;
   removeWallet: (id: string) => void;
   getDecryptedWallet: (id: string) => Promise<{ privateKey: string; address: string } | null>;
   isPasswordSet: boolean;
@@ -252,7 +257,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     return `${typePrefix}${highestNumber + 1}`;
   };
 
-  const addWallet = async (name?: string, count: number = 1): Promise<Wallet[] | null> => {
+  const addWallet = async (name?: string, count: number = 1, blockchain: BlockchainType = "ethereum"): Promise<Wallet[] | null> => {
     if (!masterPassword) {
       message.error("Master password not set");
       return null;
@@ -262,8 +267,20 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       const createdWallets: Wallet[] = [];
       
       for (let i = 0; i < count; i++) {
-        const newWallet = generateWallet();
-        const encryptedPrivateKey = await encryptWallet(newWallet.privateKey, masterPassword);
+        let newWallet: { address: string; privateKey: string };
+        let encryptedPrivateKey: string;
+        
+        // Generate wallet based on blockchain type
+        if (blockchain === "solana") {
+          newWallet = generateSolanaWallet();
+          encryptedPrivateKey = await encryptSolanaWallet(newWallet.privateKey, masterPassword);
+        } else if (blockchain === "sui") {
+          newWallet = generateSuiWallet();
+          encryptedPrivateKey = await encryptSuiWallet(newWallet.privateKey, masterPassword);
+        } else {
+          newWallet = generateWallet();
+          encryptedPrivateKey = await encryptWallet(newWallet.privateKey, masterPassword);
+        }
         
         // Use provided name or generate one
         let walletName;
@@ -291,7 +308,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           name: walletName,
           address: newWallet.address,
           encryptedPrivateKey,
-          blockchain: "ethereum",
+          blockchain,
         };
         
         createdWallets.push(wallet);
@@ -314,17 +331,30 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
-  const importWallet = async (name: string | undefined, privateKey: string): Promise<Wallet | null> => {
+  const importWallet = async (name: string | undefined, privateKey: string, blockchain: BlockchainType = "ethereum"): Promise<Wallet | null> => {
     if (!masterPassword) {
       message.error("Master password not set");
       return null;
     }
 
     try {
-      const encryptedPrivateKey = await encryptWallet(privateKey, masterPassword);
-      const address = await decryptWallet(encryptedPrivateKey, masterPassword).then(
-        (result: { address: string }) => result.address
-      );
+      let encryptedPrivateKey: string;
+      let address: string;
+      
+      // Import wallet based on blockchain type
+      if (blockchain === "solana") {
+        encryptedPrivateKey = await encryptSolanaWallet(privateKey, masterPassword);
+        const result = await decryptSolanaWallet(encryptedPrivateKey, masterPassword);
+        address = result.address;
+      } else if (blockchain === "sui") {
+        encryptedPrivateKey = await encryptSuiWallet(privateKey, masterPassword);
+        const result = await decryptSuiWallet(encryptedPrivateKey, masterPassword);
+        address = result.address;
+      } else {
+        encryptedPrivateKey = await encryptWallet(privateKey, masterPassword);
+        const result = await decryptWallet(encryptedPrivateKey, masterPassword);
+        address = result.address;
+      }
       
       // Use provided name or generate one
       const walletName = name?.trim() ? name : generateWalletName("Imported");
@@ -334,7 +364,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         name: walletName,
         address,
         encryptedPrivateKey,
-        blockchain: "ethereum",
+        blockchain,
       };
 
       const updatedWallets = [...wallets, wallet];
@@ -349,7 +379,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
-  const bulkImportWallets = async (inputs: string[], onProgress?: ProgressCallback): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
+  const bulkImportWallets = async (inputs: string[], onProgress?: ProgressCallback, blockchain: BlockchainType = "ethereum"): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
     if (!masterPassword) {
       message.error("Master password not set");
       return { success: 0, failed: inputs.length, wallets: [] };
@@ -375,12 +405,23 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       if (!trimmedInput) continue; // Skip empty lines
 
       try {
-        // Import the wallet using the utility function
-        const { createWalletFromInput } = await import("@/utils/walletUtils");
-        const walletData = createWalletFromInput(trimmedInput);
+        let walletData: { address: string; privateKey: string };
+        let encryptedPrivateKey: string;
         
-        // Encrypt the private key
-        const encryptedPrivateKey = await encryptWallet(walletData.privateKey, masterPassword);
+        // Import the wallet using the appropriate utility function based on blockchain
+        if (blockchain === "solana") {
+          const { createSolanaWalletFromInput } = await import("@/utils/solanaWalletUtils");
+          walletData = createSolanaWalletFromInput(trimmedInput);
+          encryptedPrivateKey = await encryptSolanaWallet(walletData.privateKey, masterPassword);
+        } else if (blockchain === "sui") {
+          const { createSuiWalletFromInput } = await import("@/utils/suiWalletUtils");
+          walletData = createSuiWalletFromInput(trimmedInput);
+          encryptedPrivateKey = await encryptSuiWallet(walletData.privateKey, masterPassword);
+        } else {
+          const { createWalletFromInput } = await import("@/utils/walletUtils");
+          walletData = createWalletFromInput(trimmedInput);
+          encryptedPrivateKey = await encryptWallet(walletData.privateKey, masterPassword);
+        }
         
         // Create a wallet object
         const wallet: Wallet = {
@@ -388,7 +429,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           name: generateWalletName("Imported"), // Auto-generate name
           address: walletData.address,
           encryptedPrivateKey,
-          blockchain: "ethereum",
+          blockchain,
         };
         
         results.wallets.push(wallet);
@@ -422,12 +463,25 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     message.success("Wallet removed successfully");
   };
 
-  const importWatchOnlyWallet = async (name: string | undefined, address: string): Promise<Wallet | null> => {
+  const importWatchOnlyWallet = async (name: string | undefined, address: string, blockchain: BlockchainType = "ethereum"): Promise<Wallet | null> => {
     try {
-      // Validate the address format (basic check for Ethereum address)
-      if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
-        message.error("Invalid Ethereum address format");
-        return null;
+      // Validate the address format based on blockchain
+      if (blockchain === "ethereum") {
+        if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
+          message.error("Invalid Ethereum address format");
+          return null;
+        }
+      } else if (blockchain === "solana") {
+        if (!isValidSolanaAddress(address)) {
+          message.error("Invalid Solana address format");
+          return null;
+        }
+      } else if (blockchain === "sui") {
+        // SUI addresses start with 0x and are 64 hex characters (32 bytes)
+        if (!address.match(/^0x[a-fA-F0-9]{64}$/)) {
+          message.error("Invalid SUI address format");
+          return null;
+        }
       }
       
       // Use provided name or generate one
@@ -438,7 +492,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         name: walletName,
         address,
         encryptedPrivateKey: "", // Empty for watch-only wallets
-        blockchain: "ethereum",
+        blockchain,
         isWatchOnly: true,
       };
 
@@ -473,7 +527,17 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
 
     try {
-      const decrypted = await decryptWallet(wallet.encryptedPrivateKey, masterPassword);
+      let decrypted: { address: string; privateKey: string };
+      
+      // Decrypt wallet based on blockchain type
+      if (wallet.blockchain === "solana") {
+        decrypted = await decryptSolanaWallet(wallet.encryptedPrivateKey, masterPassword);
+      } else if (wallet.blockchain === "sui") {
+        decrypted = await decryptSuiWallet(wallet.encryptedPrivateKey, masterPassword);
+      } else {
+        decrypted = await decryptWallet(wallet.encryptedPrivateKey, masterPassword);
+      }
+      
       return decrypted;
     } catch (error) {
       console.error("Failed to decrypt wallet:", error);
@@ -482,7 +546,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
-  const bulkImportWatchOnlyWallets = async (addresses: string[], onProgress?: ProgressCallback): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
+  const bulkImportWatchOnlyWallets = async (addresses: string[], onProgress?: ProgressCallback, blockchain: BlockchainType = "ethereum"): Promise<{ success: number; failed: number; wallets: Wallet[] }> => {
     const results = {
       success: 0,
       failed: 0,
@@ -503,9 +567,20 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       if (!address) continue; // Skip empty lines
 
       try {
-        // Validate the address format (basic check for Ethereum address)
-        if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
-          throw new Error("Invalid Ethereum address format");
+        // Validate the address format based on blockchain
+        if (blockchain === "ethereum") {
+          if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
+            throw new Error("Invalid Ethereum address format");
+          }
+        } else if (blockchain === "solana") {
+          if (!isValidSolanaAddress(address)) {
+            throw new Error("Invalid Solana address format");
+          }
+        } else if (blockchain === "sui") {
+          // SUI addresses are 0x followed by 64 hex characters (32 bytes)
+          if (!address.match(/^0x[a-fA-F0-9]{64}$/)) {
+            throw new Error("Invalid SUI address format");
+          }
         }
         
         // Generate a wallet name
@@ -517,7 +592,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           name: walletName,
           address,
           encryptedPrivateKey: "", // Empty for watch-only wallets
-          blockchain: "ethereum",
+          blockchain,
           isWatchOnly: true,
         };
         
