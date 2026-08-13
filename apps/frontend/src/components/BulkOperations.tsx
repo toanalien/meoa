@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Card,
   Button,
@@ -17,6 +17,7 @@ import {
   Progress,
   message,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
   SendOutlined,
   CheckCircleOutlined,
@@ -63,6 +64,18 @@ enum OperationType {
   CHECK_NATIVE_BALANCE = "check_native_balance",
   CHECK_TOKEN_BALANCE = "check_token_balance",
 }
+
+const compareText = (a?: string, b?: string) =>
+  (a ?? "").localeCompare(b ?? "", undefined, { sensitivity: "base" });
+
+const compareNumber = (a?: number | string, b?: number | string) => {
+  const toNum = (value?: number | string) => {
+    if (value === undefined || value === "") return Number.NEGATIVE_INFINITY;
+    const parsed = typeof value === "number" ? value : parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+  };
+  return toNum(a) - toNum(b);
+};
 
 const BulkOperations: React.FC = () => {
   const { wallets, getDecryptedWallet, masterPassword } = useWallet();
@@ -551,15 +564,15 @@ const BulkOperations: React.FC = () => {
   ];
 
   // Get table columns for operation results based on operation type
-  const getResultColumns = () => {
-    const baseColumns = [
+  const resultColumns = useMemo((): ColumnsType<BulkOperationResult> => {
+    const baseColumns: ColumnsType<BulkOperationResult> = [
       {
         title: "Wallet Address",
         dataIndex: "walletAddress",
         key: "walletAddress",
+        sorter: (a, b) => compareText(a.walletAddress, b.walletAddress),
         render: (text: string) => {
-          const rpcUrl = form.getFieldValue("rpcUrl");
-          const explorerUrl = getExplorerUrl(rpcUrl, text);
+          const explorerUrl = getExplorerUrl(text);
           
           return (
             <a 
@@ -579,6 +592,7 @@ const BulkOperations: React.FC = () => {
         title: "Status",
         dataIndex: "success",
         key: "success",
+        sorter: (a, b) => Number(a.success) - Number(b.success),
         render: (success: boolean) =>
           success ? (
             <Tag color="success" icon={<CheckCircleOutlined />}>
@@ -601,6 +615,7 @@ const BulkOperations: React.FC = () => {
           title: "Balance",
           dataIndex: "balance",
           key: "balance",
+          sorter: (a, b) => compareNumber(a.balance, b.balance),
           render: (text: string) => {
             if (!text) return <Text>-</Text>;
             return <Text>{text} ETH</Text>;
@@ -612,15 +627,10 @@ const BulkOperations: React.FC = () => {
           title: "Balance",
           dataIndex: "balance",
           key: "balance",
-          render: (text: string) => {
-            // Since we can't access the record directly, we need to check if we're in token balance mode
+          sorter: (a, b) => compareNumber(a.balance, b.balance),
+          render: (text: string, record: BulkOperationResult) => {
             if (!text) return <Text>-</Text>;
-            
-            // Find the token symbol from the results array for this balance
-            const result = results.find(r => r.balance === text);
-            const tokenSymbol = result?.tokenSymbol || "";
-            
-            return <Text>{text} {tokenSymbol}</Text>;
+            return <Text>{text} {record.tokenSymbol || ""}</Text>;
           },
         });
       }
@@ -629,7 +639,8 @@ const BulkOperations: React.FC = () => {
         title: "Txns",
         dataIndex: "txCount",
         key: "txCount",
-        render: (count: string | number | undefined) => (
+        sorter: (a, b) => compareNumber(a.txCount, b.txCount),
+        render: (count: number | undefined) => (
           <Text>{count !== undefined ? count : "-"}</Text>
         ),
       });
@@ -639,6 +650,7 @@ const BulkOperations: React.FC = () => {
         title: "Transaction Hash",
         dataIndex: "txHash",
         key: "txHash",
+        sorter: (a, b) => compareText(a.txHash, b.txHash),
         render: (text: string) => {
           if (!text) return <Text>-</Text>;
           
@@ -682,6 +694,7 @@ const BulkOperations: React.FC = () => {
       title: "Error",
       dataIndex: "error",
       key: "error",
+      sorter: (a, b) => compareText(a.error, b.error),
       render: (text: string) => (
         <Text type="danger" style={{ fontSize: "0.85rem" }} ellipsis={{ tooltip: text }}>
           {text || "-"}
@@ -690,7 +703,7 @@ const BulkOperations: React.FC = () => {
     });
 
     return baseColumns;
-  };
+  }, [operationType, form]);
 
   return (
     <div>
@@ -1002,10 +1015,12 @@ const BulkOperations: React.FC = () => {
                     </Button>
                   </Space>
                 </div>
-                <Table
-                  columns={getResultColumns()}
-                  dataSource={results.map((result, index) => ({ ...result, key: index }))}
+                <Table<BulkOperationResult>
+                  columns={resultColumns}
+                  rowKey="walletAddress"
+                  dataSource={results}
                   pagination={false}
+                  showSorterTooltip
                 />
               </>
             )}

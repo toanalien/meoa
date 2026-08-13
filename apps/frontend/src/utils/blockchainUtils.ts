@@ -10,27 +10,12 @@ export const USDT_ADDRESSES = {
 };
 
 /**
- * Returns the appropriate blockchain explorer URL for a given network and address
- * @param rpcUrl The RPC URL for the network
+ * Returns the Blockscan URL for a wallet address
  * @param address The wallet address
- * @returns The blockchain explorer URL for the address
+ * @returns The Blockscan URL for the address
  */
-export function getExplorerUrl(rpcUrl: string, address: string): string {
-  // Determine which explorer to use based on the RPC URL
-  if (rpcUrl.includes("binance") || rpcUrl.includes("bsc")) {
-    return `https://bscscan.com/address/${address}`;
-  } else if (rpcUrl.includes("polygon")) {
-    return `https://polygonscan.com/address/${address}`;
-  } else if (rpcUrl.includes("arbitrum")) {
-    return `https://arbiscan.io/address/${address}`;
-  } else if (rpcUrl.includes("optimism")) {
-    return `https://optimistic.etherscan.io/address/${address}`;
-  } else if (rpcUrl.includes("sepolia")) {
-    return `https://sepolia.etherscan.io/address/${address}`;
-  } else {
-    // Default to Etherscan for Ethereum and unknown networks
-    return `https://etherscan.io/address/${address}`;
-  }
+export function getExplorerUrl(address: string): string {
+  return `https://blockscan.com/address/${address}`;
 }
 
 // Standard ERC20 ABI for token interactions
