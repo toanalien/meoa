@@ -1,12 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { message } from "antd";
 import { encryptWallet, decryptWallet, generateWallet } from "@/utils/walletUtils";
-import { 
-  generateSolanaWallet, 
-  encryptSolanaWallet, 
-  decryptSolanaWallet,
-  isValidSolanaAddress 
-} from "@/utils/solanaWalletUtils";
 import CryptoJS from "crypto-js";
 
 export type BlockchainType = "ethereum" | "solana";
