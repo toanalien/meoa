@@ -2,6 +2,6 @@ import React from "react";
 import AppLayout from "@/components/AppLayout";
 import { TAB_KEYS } from "@/utils/tabRoutes";
 
-export default function Home() {
-  return <AppLayout activeTab={TAB_KEYS.wallets} />;
+export default function OperationsPage() {
+  return <AppLayout activeTab={TAB_KEYS.operations} />;
 }
