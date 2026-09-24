@@ -1,0 +1,185 @@
+[
+  {
+    "chainId": 1,
+    "name": "Ethereum Mainnet",
+    "rpc": [
+      {
+        "url": "https://eth.blockrazor.xyz/maxbackrun"
+      },
+      {
+        "url": "https://ethereum-rpc.publicnode.com"
+      },
+      {
+        "url": "https://ethereum-json-rpc.stakely.io"
+      },
+      {
+        "url": "https://eth.blockrazor.xyz/fullprivacy"
+      },
+      {
+        "url": "https://eth.blockrazor.xyz"
+      },
+      {
+        "url": "https://ethereum-mainnet.gateway.tatum.io"
+      },
+      {
+        "url": "https://gateway.tenderly.co/public/mainnet"
+      },
+      {
+        "url": "https://one.valve.city/rpc/vk_demo/evm/1"
+      },
+      {
+        "url": "https://rpc.mevblocker.io"
+      },
+      {
+        "url": "https://public-eth.nownodes.io"
+      }
+    ]
+  },
+  {
+    "chainId": 11155111,
+    "name": "Ethereum Sepolia",
+    "rpc": [
+      {
+        "url": "https://ethereum-sepolia.gateway.tatum.io"
+      },
+      {
+        "url": "https://0xrpc.io/sep"
+      },
+      {
+        "url": "https://sepolia.rpc.sentio.xyz"
+      },
+      {
+        "url": "https://eth-sepolia-testnet.api.pocket.network"
+      },
+      {
+        "url": "https://rpc.sepolia.ethpandaops.io"
+      }
+    ]
+  },
+  {
+    "chainId": 56,
+    "name": "BNB Smart Chain Mainnet",
+    "rpc": [
+      {
+        "url": "https://bsc.blockrazor.xyz/maxbackrun"
+      },
+      {
+        "url": "https://bsc.drpc.org"
+      },
+      {
+        "url": "https://bsc.rpc.blxrbdn.com"
+      },
+      {
+        "url": "https://bsc.blockrazor.xyz/fullprivacy"
+      },
+      {
+        "url": "https://56.rpc.thirdweb.com"
+      },
+      {
+        "url": "https://bsc.meowrpc.com"
+      },
+      {
+        "url": "https://public-bsc-mainnet.fastnode.io"
+      },
+      {
+        "url": "https://bsc-dataseed1.defibit.io"
+      },
+      {
+        "url": "https://bsc.blockrazor.xyz"
+      },
+      {
+        "url": "https://public-bsc.nownodes.io"
+      }
+    ]
+  },
+  {
+    "chainId": 137,
+    "name": "Polygon Mainnet",
+    "rpc": [
+      {
+        "url": "https://polygon.drpc.org"
+      },
+      {
+        "url": "https://gateway.tenderly.co/public/polygon"
+      },
+      {
+        "url": "https://polygon.gateway.tenderly.co"
+      },
+      {
+        "url": "https://137.rpc.thirdweb.com"
+      },
+      {
+        "url": "https://rpc.swiftnodes.io/rpc/polygon"
+      },
+      {
+        "url": "https://rpc-mainnet.matic.quiknode.pro"
+      },
+      {
+        "url": "https://rpc-polygon.blockmachine.io"
+      },
+      {
+        "url": "https://rpc.private.mev-x.com/polygon"
+      },
+      {
+        "url": "https://poly.api.pocket.network"
+      },
+      {
+        "url": "https://matic.rpc.sentio.xyz"
+      }
+    ]
+  },
+  {
+    "chainId": 42161,
+    "name": "Arbitrum One",
+    "rpc": [
+      {
+        "url": "https://arb1.arbitrum.io/rpc"
+      },
+      {
+        "url": "https://arbitrum-one-public.nodies.app"
+      },
+      {
+        "url": "https://arbitrum.drpc.org"
+      },
+      {
+        "url": "https://arbitrum-one.public.blastapi.io"
+      },
+      {
+        "url": "https://arb-one-mainnet.gateway.tatum.io"
+      },
+      {
+        "url": "https://arbitrum.gateway.tenderly.co"
+      },
+      {
+        "url": "https://arbitrum.meowrpc.com"
+      },
+      {
+        "url": "https://arbitrum-one-rpc.publicnode.com"
+      },
+      {
+        "url": "https://api.zan.top/arb-one"
+      }
+    ]
+  },
+  {
+    "chainId": 10,
+    "name": "OP Mainnet",
+    "rpc": [
+      {
+        "url": "https://public-op-mainnet.fastnode.io"
+      },
+      {
+        "url": "https://optimism.rpc.sentio.xyz"
+      },
+      {
+        "url": "https://rpc-optimism.blockmachine.io"
+      },
+      {
+        "url": "https://rpc.swiftnodes.io/rpc/optimism"
+      },
+      {
+        "url": "https://10.rpc.thirdweb.com"
+      }
+    ]
+  }
+]

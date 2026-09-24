@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Card,
   Button,
@@ -38,22 +38,21 @@ import {
   getExplorerUrl,
   TransactionParams,
   BulkOperationResult,
-  USDT_ADDRESSES,
+  usdtAddressForChain,
 } from "@/utils/blockchainUtils";
+import {
+  BUILTIN_NETWORKS,
+  builtinNetworkById,
+  joinRpcUrls,
+  txExplorerUrl,
+} from "@/utils/builtinNetworks";
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
 
-// Common blockchain networks
-const NETWORKS = [
-  { name: "Ethereum Mainnet", rpcUrl: "https://eth.llamarpc.com" },
-  { name: "Ethereum Sepolia", rpcUrl: "https://rpc.sepolia.org" },
-  { name: "BSC Mainnet", rpcUrl: "https://bsc-dataseed.binance.org" },
-  { name: "Polygon Mainnet", rpcUrl: "https://polygon-rpc.com" },
-  { name: "Arbitrum One", rpcUrl: "https://arb1.arbitrum.io/rpc" },
-  { name: "Optimism", rpcUrl: "https://mainnet.optimism.io" },
-];
+const DEFAULT_NETWORK_ID = String(BUILTIN_NETWORKS[0].chainId);
+const DEFAULT_RPC_URLS = joinRpcUrls(BUILTIN_NETWORKS[0].rpcUrls);
 
 // Operation types
 enum OperationType {
@@ -77,6 +76,36 @@ const compareNumber = (a?: number | string, b?: number | string) => {
   return toNum(a) - toNum(b);
 };
 
+function CheckProgress({
+  progress,
+  checking,
+}: {
+  progress: { current: number; total: number; activeAddresses: string[] };
+  checking: boolean;
+}) {
+  return (
+    <div>
+      <div>
+        {checking
+          ? `Checking ${progress.current}/${progress.total}`
+          : `Processing transactions... ${progress.current}/${progress.total} wallets`}
+      </div>
+      {checking && progress.activeAddresses.length > 0 && (
+        <div style={{ marginTop: 8, textAlign: "left", maxHeight: 180, overflow: "auto" }}>
+          {progress.activeAddresses.map((address, index) => (
+            <Text
+              key={`${address}-${index}`}
+              style={{ display: "block", fontSize: "0.8rem", wordBreak: "break-all" }}
+            >
+              {address}
+            </Text>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const BulkOperations: React.FC = () => {
   const { wallets, getDecryptedWallet, masterPassword } = useWallet();
   const [form] = Form.useForm();
@@ -85,7 +114,11 @@ const BulkOperations: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [results, setResults] = useState<BulkOperationResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    current: number;
+    total: number;
+    activeAddresses: string[];
+  } | null>(null);
   const [confirmModalVisible, setConfirmModalVisible] = useState<boolean>(false);
   const [operationInProgress, setOperationInProgress] = useState<boolean>(false);
   
@@ -269,16 +302,18 @@ const BulkOperations: React.FC = () => {
     });
   };
   
-  // Initialize form with default values after component mounts (client-side only)
+  const defaultsApplied = useRef(false);
+  // Apply defaults once the form is mounted. The form is not rendered until a master password and wallets exist.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      form.setFieldsValue({
-        operationType: OperationType.CHECK_NATIVE_BALANCE,
-        network: NETWORKS[0].rpcUrl,
-        rpcUrl: NETWORKS[0].rpcUrl,
-      });
-    }
-  }, [form]);
+    if (defaultsApplied.current) return;
+    if (typeof window === "undefined" || !masterPassword || wallets.length === 0) return;
+    defaultsApplied.current = true;
+    form.setFieldsValue({
+      operationType: OperationType.CHECK_NATIVE_BALANCE,
+      network: DEFAULT_NETWORK_ID,
+      rpcUrl: DEFAULT_RPC_URLS,
+    });
+  }, [form, masterPassword, wallets.length]);
 
   // Handle wallet selection
   const handleWalletSelectionChange = (selectedRowKeys: React.Key[]) => {
@@ -290,25 +325,11 @@ const BulkOperations: React.FC = () => {
     setOperationType(value);
     form.resetFields(["tokenAddress", "data"]);
     
-    // Set default token address for CHECK_TOKEN_BALANCE
+    // Set default token address for CHECK_TOKEN_BALANCE from the selected chain id.
     if (value === OperationType.CHECK_TOKEN_BALANCE) {
-      // Get the network to determine which USDT address to use
       const network = form.getFieldValue("network");
-      let defaultTokenAddress = USDT_ADDRESSES.ETHEREUM; // Default to Ethereum USDT
-      
-      if (network && network !== "custom") {
-        if (network.includes("binance") || network.includes("bsc")) {
-          defaultTokenAddress = USDT_ADDRESSES.BSC;
-        } else if (network.includes("polygon")) {
-          defaultTokenAddress = USDT_ADDRESSES.POLYGON;
-        } else if (network.includes("arbitrum")) {
-          defaultTokenAddress = USDT_ADDRESSES.ARBITRUM;
-        } else if (network.includes("optimism")) {
-          defaultTokenAddress = USDT_ADDRESSES.OPTIMISM;
-        }
-      }
-      
-      form.setFieldsValue({ tokenAddress: defaultTokenAddress });
+      const chainId = network && network !== "custom" ? Number(network) : undefined;
+      form.setFieldsValue({ tokenAddress: usdtAddressForChain(chainId) });
     }
   };
 
@@ -316,28 +337,14 @@ const BulkOperations: React.FC = () => {
   const handleNetworkChange = (value: string) => {
     if (value === "custom") {
       form.setFieldsValue({ rpcUrl: "" });
-    } else {
-      const network = NETWORKS.find((n) => n.rpcUrl === value);
-      if (network) {
-        form.setFieldsValue({ rpcUrl: network.rpcUrl });
-      }
-      
-      // Update token address if CHECK_TOKEN_BALANCE is selected
-      if (operationType === OperationType.CHECK_TOKEN_BALANCE) {
-        let defaultTokenAddress = USDT_ADDRESSES.ETHEREUM; // Default to Ethereum USDT
-        
-        if (value.includes("binance") || value.includes("bsc")) {
-          defaultTokenAddress = USDT_ADDRESSES.BSC;
-        } else if (value.includes("polygon")) {
-          defaultTokenAddress = USDT_ADDRESSES.POLYGON;
-        } else if (value.includes("arbitrum")) {
-          defaultTokenAddress = USDT_ADDRESSES.ARBITRUM;
-        } else if (value.includes("optimism")) {
-          defaultTokenAddress = USDT_ADDRESSES.OPTIMISM;
-        }
-        
-        form.setFieldsValue({ tokenAddress: defaultTokenAddress });
-      }
+      return;
+    }
+    const network = builtinNetworkById(Number(value));
+    if (network) {
+      form.setFieldsValue({ rpcUrl: joinRpcUrls(network.rpcUrls) });
+    }
+    if (operationType === OperationType.CHECK_TOKEN_BALANCE) {
+      form.setFieldsValue({ tokenAddress: usdtAddressForChain(Number(value)) });
     }
   };
 
@@ -399,16 +406,23 @@ const BulkOperations: React.FC = () => {
         }
 
         // Reset progress
-        setProgress({ current: 0, total: addresses.length });
+        setProgress({ current: 0, total: addresses.length, activeAddresses: [] });
 
         // Check balances with progress tracking
         let operationResults: BulkOperationResult[];
+        const onCheckProgress = (
+          current: number,
+          total: number,
+          activeAddresses?: readonly string[]
+        ) => {
+          setProgress({ current, total, activeAddresses: [...(activeAddresses ?? [])] });
+        };
         
         if (operationType === OperationType.CHECK_NATIVE_BALANCE) {
           operationResults = await bulkCheckNativeBalance(
             addresses, 
             values.rpcUrl,
-            (current, total) => setProgress({ current, total })
+            onCheckProgress
           );
         } else {
           // Must be CHECK_TOKEN_BALANCE
@@ -420,7 +434,7 @@ const BulkOperations: React.FC = () => {
             addresses,
             values.tokenAddress,
             values.rpcUrl,
-            (current, total) => setProgress({ current, total })
+            onCheckProgress
           );
         }
         
@@ -460,7 +474,7 @@ const BulkOperations: React.FC = () => {
       };
 
       // Reset progress
-      setProgress({ current: 0, total: privateKeys.length });
+      setProgress({ current: 0, total: privateKeys.length, activeAddresses: [] });
 
       // Execute the operation based on the selected type with progress tracking
       let operationResults: BulkOperationResult[] = [];
@@ -471,7 +485,7 @@ const BulkOperations: React.FC = () => {
             privateKeys, 
             params, 
             values.rpcUrl,
-            (current, total) => setProgress({ current, total })
+            (current, total) => setProgress({ current, total, activeAddresses: [] })
           );
           break;
         case OperationType.TRANSFER_TOKEN:
@@ -479,7 +493,7 @@ const BulkOperations: React.FC = () => {
             privateKeys, 
             params, 
             values.rpcUrl,
-            (current, total) => setProgress({ current, total })
+            (current, total) => setProgress({ current, total, activeAddresses: [] })
           );
           break;
         case OperationType.APPROVE_TOKEN:
@@ -487,7 +501,7 @@ const BulkOperations: React.FC = () => {
             privateKeys, 
             params, 
             values.rpcUrl,
-            (current, total) => setProgress({ current, total })
+            (current, total) => setProgress({ current, total, activeAddresses: [] })
           );
           break;
         case OperationType.CUSTOM:
@@ -495,7 +509,7 @@ const BulkOperations: React.FC = () => {
             privateKeys, 
             params, 
             values.rpcUrl,
-            (current, total) => setProgress({ current, total })
+            (current, total) => setProgress({ current, total, activeAddresses: [] })
           );
           break;
       }
@@ -654,24 +668,10 @@ const BulkOperations: React.FC = () => {
         render: (text: string) => {
           if (!text) return <Text>-</Text>;
           
-          const rpcUrl = form.getFieldValue("rpcUrl");
-          let explorerUrl = "";
-          
-          // Determine which explorer to use based on the RPC URL
-          if (rpcUrl.includes("binance") || rpcUrl.includes("bsc")) {
-            explorerUrl = `https://bscscan.com/tx/${text}`;
-          } else if (rpcUrl.includes("polygon")) {
-            explorerUrl = `https://polygonscan.com/tx/${text}`;
-          } else if (rpcUrl.includes("arbitrum")) {
-            explorerUrl = `https://arbiscan.io/tx/${text}`;
-          } else if (rpcUrl.includes("optimism")) {
-            explorerUrl = `https://optimistic.etherscan.io/tx/${text}`;
-          } else if (rpcUrl.includes("sepolia")) {
-            explorerUrl = `https://sepolia.etherscan.io/tx/${text}`;
-          } else {
-            // Default to Etherscan for Ethereum and unknown networks
-            explorerUrl = `https://etherscan.io/tx/${text}`;
-          }
+          const networkValue = form.getFieldValue("network");
+          const chainId =
+            networkValue && networkValue !== "custom" ? Number(networkValue) : undefined;
+          const explorerUrl = txExplorerUrl(chainId, text);
           
           return (
             <a 
@@ -750,8 +750,8 @@ const BulkOperations: React.FC = () => {
               onFinish={handleExecuteOperation}
               initialValues={{
                 operationType: OperationType.CHECK_NATIVE_BALANCE,
-                network: NETWORKS[0].rpcUrl,
-                rpcUrl: NETWORKS[0].rpcUrl,
+                network: DEFAULT_NETWORK_ID,
+                rpcUrl: DEFAULT_RPC_URLS,
               }}
             >
               <Form.Item
@@ -801,8 +801,8 @@ const BulkOperations: React.FC = () => {
                 rules={[{ required: true, message: "Please select a network" }]}
               >
                 <Select onChange={handleNetworkChange}>
-                  {NETWORKS.map((network) => (
-                    <Option key={network.rpcUrl} value={network.rpcUrl}>
+                  {BUILTIN_NETWORKS.map((network) => (
+                    <Option key={network.chainId} value={String(network.chainId)}>
                       {network.name}
                     </Option>
                   ))}
@@ -813,9 +813,15 @@ const BulkOperations: React.FC = () => {
               <Form.Item
                 name="rpcUrl"
                 label="RPC URL"
+                extra="Separate multiple endpoints with commas. Calls rotate across the list and retry the next URL when one is rate limited or unreachable."
                 rules={[{ required: true, message: "Please enter the RPC URL" }]}
               >
-                <Input placeholder="e.g., https://eth.llamarpc.com" />
+                <TextArea
+                  id="rpcUrl"
+                  rows={3}
+                  autoSize={{ minRows: 2, maxRows: 6 }}
+                  placeholder="https://a.example/rpc, https://b.example/rpc"
+                />
               </Form.Item>
 
               {operationType !== OperationType.CHECK_NATIVE_BALANCE && 
@@ -914,9 +920,17 @@ const BulkOperations: React.FC = () => {
               <div style={{ textAlign: "center", margin: "20px 0" }}>
                 <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
                 <div style={{ marginTop: 8 }}>
-                  {progress 
-                    ? `Processing transactions... ${progress.current}/${progress.total} wallets`
-                    : "Processing transactions..."}
+                  {progress ? (
+                    <CheckProgress
+                      progress={progress}
+                      checking={
+                        operationType === OperationType.CHECK_NATIVE_BALANCE ||
+                        operationType === OperationType.CHECK_TOKEN_BALANCE
+                      }
+                    />
+                  ) : (
+                    "Processing transactions..."
+                  )}
                 </div>
               </div>
             )}
@@ -953,7 +967,11 @@ const BulkOperations: React.FC = () => {
                     : "Custom Transaction"}
                 </Paragraph>
                 <Paragraph>
-                  <Text strong>Network:</Text> {form.getFieldValue("network") === "custom" ? "Custom RPC" : form.getFieldValue("network")}
+                  <Text strong>Network:</Text>{" "}
+                  {form.getFieldValue("network") === "custom"
+                    ? "Custom RPC"
+                    : builtinNetworkById(Number(form.getFieldValue("network")))?.name ??
+                      form.getFieldValue("network")}
                 </Paragraph>
                 {operationType !== OperationType.CHECK_NATIVE_BALANCE && 
                  operationType !== OperationType.CHECK_TOKEN_BALANCE && (
@@ -980,10 +998,13 @@ const BulkOperations: React.FC = () => {
                       status="active"
                       style={{ marginBottom: 12 }}
                     />
-                    <div>
-                      <Spin indicator={<LoadingOutlined style={{ fontSize: 16 }} spin />} style={{ marginRight: 8 }} />
-                      Processing transactions... {progress.current}/{progress.total} wallets
-                    </div>
+                    <CheckProgress
+                      progress={progress}
+                      checking={
+                        operationType === OperationType.CHECK_NATIVE_BALANCE ||
+                        operationType === OperationType.CHECK_TOKEN_BALANCE
+                      }
+                    />
                   </div>
                 )}
               </div>
