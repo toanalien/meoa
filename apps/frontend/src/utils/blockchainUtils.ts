@@ -1,4 +1,5 @@
-import { ethers, Wallet, Contract } from "ethers";
+import { ethers } from "ethers";
+import { JsonRpcTransport, openRpcPool, RpcRotator } from "./rpcPool";
 
 // USDT contract addresses for different networks
 export const USDT_ADDRESSES = {
@@ -8,6 +9,22 @@ export const USDT_ADDRESSES = {
   ARBITRUM: "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
   OPTIMISM: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
 };
+
+/** USDT address for a built-in chain. Sepolia keeps the Ethereum USDT default. */
+export function usdtAddressForChain(chainId?: number): string {
+  switch (chainId) {
+    case 56:
+      return USDT_ADDRESSES.BSC;
+    case 137:
+      return USDT_ADDRESSES.POLYGON;
+    case 42161:
+      return USDT_ADDRESSES.ARBITRUM;
+    case 10:
+      return USDT_ADDRESSES.OPTIMISM;
+    default:
+      return USDT_ADDRESSES.ETHEREUM;
+  }
+}
 
 /**
  * Returns the Blockscan URL for a wallet address
@@ -27,6 +44,8 @@ const ERC20_ABI = [
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
 ];
+
+const erc20 = new ethers.Interface(ERC20_ABI);
 
 // Interface for transaction parameters
 export interface TransactionParams {
@@ -51,7 +70,11 @@ export interface BulkOperationResult {
 }
 
 // Progress callback type
-export type ProgressCallback = (current: number, total: number) => void;
+export type ProgressCallback = (
+  current: number,
+  total: number,
+  activeAddresses?: readonly string[]
+) => void;
 
 /**
  * Creates a provider for the specified network
@@ -62,53 +85,123 @@ export function createProvider(rpcUrl: string) {
   return new ethers.JsonRpcProvider(rpcUrl);
 }
 
+async function rpcHex(pool: RpcRotator, method: string, params: unknown[]): Promise<string> {
+  const result = await pool.call(method, params);
+  if (typeof result !== "string") {
+    throw new Error(`${method} returned an unexpected result`);
+  }
+  return result;
+}
+
+async function readContract(
+  pool: RpcRotator,
+  tokenAddress: string,
+  fragment: string,
+  args: unknown[] = []
+): Promise<ethers.Result> {
+  const data = erc20.encodeFunctionData(fragment, args);
+  const raw = await rpcHex(pool, "eth_call", [{ to: tokenAddress, data }, "latest"]);
+  return erc20.decodeFunctionResult(fragment, raw);
+}
+
+function txFeeFields(params: TransactionParams): { gasLimit?: bigint; gasPrice?: bigint } {
+  return {
+    gasLimit: params.gasLimit ? ethers.parseUnits(params.gasLimit, "wei") : undefined,
+    gasPrice: params.gasPrice ? ethers.parseUnits(params.gasPrice, "gwei") : undefined,
+  };
+}
+
+async function resolveChainId(pool: RpcRotator): Promise<number> {
+  return Number(BigInt(await rpcHex(pool, "eth_chainId", [])));
+}
+
+async function broadcastTransaction(
+  pool: RpcRotator,
+  privateKey: string,
+  chainId: number,
+  fields: {
+    to: string;
+    value?: bigint;
+    data?: string;
+    gasLimit?: bigint;
+    gasPrice?: bigint;
+  }
+): Promise<{ walletAddress: string; txHash: string }> {
+  const wallet = new ethers.Wallet(privateKey);
+  const data = fields.data ?? "0x";
+  const value = fields.value ?? BigInt(0);
+  const nonce = Number(
+    BigInt(await rpcHex(pool, "eth_getTransactionCount", [wallet.address, "pending"]))
+  );
+  const gasPrice = fields.gasPrice ?? BigInt(await rpcHex(pool, "eth_gasPrice", []));
+  const gasLimit =
+    fields.gasLimit ??
+    BigInt(
+      await rpcHex(pool, "eth_estimateGas", [
+        {
+          from: wallet.address,
+          to: fields.to,
+          value: ethers.toQuantity(value),
+          data,
+        },
+      ])
+    );
+  const signed = await wallet.signTransaction({
+    type: 0,
+    chainId,
+    nonce,
+    gasPrice,
+    gasLimit,
+    to: fields.to,
+    value,
+    data,
+  });
+  const txHash = await rpcHex(pool, "eth_sendRawTransaction", [signed]);
+  return { walletAddress: wallet.address, txHash };
+}
+
+function failedWallet(privateKey: string, error: unknown): BulkOperationResult {
+  return {
+    walletAddress: new ethers.Wallet(privateKey).address,
+    success: false,
+    error: error instanceof Error ? error.message : String(error),
+  };
+}
+
 /**
- * Sends native tokens (ETH, BNB, etc.) from multiple wallets
- * @param privateKeys Array of private keys
- * @param params Transaction parameters
- * @param rpcUrl The RPC URL for the network
- * @param onProgress Optional callback for progress updates
- * @returns Array of operation results
+ * Sends native tokens (ETH, BNB, etc.) from multiple wallets.
+ * `rpcUrl` may be one URL or several separated by commas.
  */
 export async function bulkSend(
   privateKeys: string[],
   params: TransactionParams,
   rpcUrl: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  transport?: JsonRpcTransport
 ): Promise<BulkOperationResult[]> {
-  const provider = createProvider(rpcUrl);
+  const pool = openRpcPool(rpcUrl, transport);
   const results: BulkOperationResult[] = [];
   const total = privateKeys.length;
+  let chainId: number | undefined;
 
   for (let i = 0; i < privateKeys.length; i++) {
     const privateKey = privateKeys[i];
-    
-    // Update progress
-    if (onProgress) {
-      onProgress(i + 1, total);
-    }
+    if (onProgress) onProgress(i + 1, total);
     try {
-      const wallet = new Wallet(privateKey, provider);
-      
-      const tx = await wallet.sendTransaction({
+      if (chainId === undefined) chainId = await resolveChainId(pool);
+      const sent = await broadcastTransaction(pool, privateKey, chainId, {
         to: params.to,
         value: params.value ? ethers.parseEther(params.value) : undefined,
-        gasLimit: params.gasLimit ? ethers.parseUnits(params.gasLimit, "wei") : undefined,
-        gasPrice: params.gasPrice ? ethers.parseUnits(params.gasPrice, "gwei") : undefined,
+        ...txFeeFields(params),
       });
-
       results.push({
-        walletAddress: wallet.address,
+        walletAddress: sent.walletAddress,
         success: true,
-        txHash: tx.hash,
+        txHash: sent.txHash,
       });
     } catch (error) {
       console.error(`Error sending from wallet:`, error);
-      results.push({
-        walletAddress: new Wallet(privateKey).address,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      results.push(failedWallet(privateKey, error));
     }
   }
 
@@ -116,61 +209,47 @@ export async function bulkSend(
 }
 
 /**
- * Transfers ERC20 tokens from multiple wallets
- * @param privateKeys Array of private keys
- * @param params Transaction parameters including token address
- * @param rpcUrl The RPC URL for the network
- * @param onProgress Optional callback for progress updates
- * @returns Array of operation results
+ * Transfers ERC20 tokens from multiple wallets.
+ * `rpcUrl` may be one URL or several separated by commas.
  */
 export async function bulkTransferToken(
   privateKeys: string[],
   params: TransactionParams,
   rpcUrl: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  transport?: JsonRpcTransport
 ): Promise<BulkOperationResult[]> {
   if (!params.tokenAddress) {
     throw new Error("Token address is required for token transfers");
   }
 
-  const provider = createProvider(rpcUrl);
+  const pool = openRpcPool(rpcUrl, transport);
   const results: BulkOperationResult[] = [];
   const total = privateKeys.length;
+  let chainId: number | undefined;
 
   for (let i = 0; i < privateKeys.length; i++) {
     const privateKey = privateKeys[i];
-    
-    // Update progress
-    if (onProgress) {
-      onProgress(i + 1, total);
-    }
+    if (onProgress) onProgress(i + 1, total);
     try {
-      const wallet = new Wallet(privateKey, provider);
-      const tokenContract = new Contract(params.tokenAddress, ERC20_ABI, wallet);
-      
-      // Get token decimals
-      const decimals = await tokenContract.decimals();
-      
-      // Parse the amount with the correct number of decimals
+      const decimals = Number((await readContract(pool, params.tokenAddress, "decimals"))[0]);
       const amount = ethers.parseUnits(params.value || "0", decimals);
-      
-      const tx = await tokenContract.transfer(params.to, amount, {
-        gasLimit: params.gasLimit ? ethers.parseUnits(params.gasLimit, "wei") : undefined,
-        gasPrice: params.gasPrice ? ethers.parseUnits(params.gasPrice, "gwei") : undefined,
+      const data = erc20.encodeFunctionData("transfer", [params.to, amount]);
+      if (chainId === undefined) chainId = await resolveChainId(pool);
+      const sent = await broadcastTransaction(pool, privateKey, chainId, {
+        to: params.tokenAddress,
+        data,
+        value: BigInt(0),
+        ...txFeeFields(params),
       });
-
       results.push({
-        walletAddress: wallet.address,
+        walletAddress: sent.walletAddress,
         success: true,
-        txHash: tx.hash,
+        txHash: sent.txHash,
       });
     } catch (error) {
       console.error(`Error transferring tokens from wallet:`, error);
-      results.push({
-        walletAddress: new Wallet(privateKey).address,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      results.push(failedWallet(privateKey, error));
     }
   }
 
@@ -178,64 +257,48 @@ export async function bulkTransferToken(
 }
 
 /**
- * Approves ERC20 tokens for spending from multiple wallets
- * @param privateKeys Array of private keys
- * @param params Transaction parameters including token address
- * @param rpcUrl The RPC URL for the network
- * @param onProgress Optional callback for progress updates
- * @returns Array of operation results
+ * Approves ERC20 tokens for spending from multiple wallets.
+ * `rpcUrl` may be one URL or several separated by commas.
  */
 export async function bulkApproveToken(
   privateKeys: string[],
   params: TransactionParams,
   rpcUrl: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  transport?: JsonRpcTransport
 ): Promise<BulkOperationResult[]> {
   if (!params.tokenAddress) {
     throw new Error("Token address is required for token approvals");
   }
 
-  const provider = createProvider(rpcUrl);
+  const pool = openRpcPool(rpcUrl, transport);
   const results: BulkOperationResult[] = [];
   const total = privateKeys.length;
+  let chainId: number | undefined;
 
   for (let i = 0; i < privateKeys.length; i++) {
     const privateKey = privateKeys[i];
-    
-    // Update progress
-    if (onProgress) {
-      onProgress(i + 1, total);
-    }
+    if (onProgress) onProgress(i + 1, total);
     try {
-      const wallet = new Wallet(privateKey, provider);
-      const tokenContract = new Contract(params.tokenAddress, ERC20_ABI, wallet);
-      
-      // Get token decimals
-      const decimals = await tokenContract.decimals();
-      
-      // Parse the amount with the correct number of decimals
-      // If value is "max", approve maximum possible amount
-      const amount = params.value === "max" 
-        ? ethers.MaxUint256 
-        : ethers.parseUnits(params.value || "0", decimals);
-      
-      const tx = await tokenContract.approve(params.to, amount, {
-        gasLimit: params.gasLimit ? ethers.parseUnits(params.gasLimit, "wei") : undefined,
-        gasPrice: params.gasPrice ? ethers.parseUnits(params.gasPrice, "gwei") : undefined,
+      const decimals = Number((await readContract(pool, params.tokenAddress, "decimals"))[0]);
+      const amount =
+        params.value === "max" ? ethers.MaxUint256 : ethers.parseUnits(params.value || "0", decimals);
+      const data = erc20.encodeFunctionData("approve", [params.to, amount]);
+      if (chainId === undefined) chainId = await resolveChainId(pool);
+      const sent = await broadcastTransaction(pool, privateKey, chainId, {
+        to: params.tokenAddress,
+        data,
+        value: BigInt(0),
+        ...txFeeFields(params),
       });
-
       results.push({
-        walletAddress: wallet.address,
+        walletAddress: sent.walletAddress,
         success: true,
-        txHash: tx.hash,
+        txHash: sent.txHash,
       });
     } catch (error) {
       console.error(`Error approving tokens from wallet:`, error);
-      results.push({
-        walletAddress: new Wallet(privateKey).address,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      results.push(failedWallet(privateKey, error));
     }
   }
 
@@ -243,53 +306,40 @@ export async function bulkApproveToken(
 }
 
 /**
- * Executes a custom transaction from multiple wallets (for swaps or other complex operations)
- * @param privateKeys Array of private keys
- * @param params Transaction parameters including custom data
- * @param rpcUrl The RPC URL for the network
- * @param onProgress Optional callback for progress updates
- * @returns Array of operation results
+ * Executes a custom transaction from multiple wallets.
+ * `rpcUrl` may be one URL or several separated by commas.
  */
 export async function bulkCustomTransaction(
   privateKeys: string[],
   params: TransactionParams,
   rpcUrl: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  transport?: JsonRpcTransport
 ): Promise<BulkOperationResult[]> {
-  const provider = createProvider(rpcUrl);
+  const pool = openRpcPool(rpcUrl, transport);
   const results: BulkOperationResult[] = [];
   const total = privateKeys.length;
+  let chainId: number | undefined;
 
   for (let i = 0; i < privateKeys.length; i++) {
     const privateKey = privateKeys[i];
-    
-    // Update progress
-    if (onProgress) {
-      onProgress(i + 1, total);
-    }
+    if (onProgress) onProgress(i + 1, total);
     try {
-      const wallet = new Wallet(privateKey, provider);
-      
-      const tx = await wallet.sendTransaction({
+      if (chainId === undefined) chainId = await resolveChainId(pool);
+      const sent = await broadcastTransaction(pool, privateKey, chainId, {
         to: params.to,
         value: params.value ? ethers.parseEther(params.value) : undefined,
         data: params.data,
-        gasLimit: params.gasLimit ? ethers.parseUnits(params.gasLimit, "wei") : undefined,
-        gasPrice: params.gasPrice ? ethers.parseUnits(params.gasPrice, "gwei") : undefined,
+        ...txFeeFields(params),
       });
-
       results.push({
-        walletAddress: wallet.address,
+        walletAddress: sent.walletAddress,
         success: true,
-        txHash: tx.hash,
+        txHash: sent.txHash,
       });
     } catch (error) {
       console.error(`Error executing custom transaction from wallet:`, error);
-      results.push({
-        walletAddress: new Wallet(privateKey).address,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      results.push(failedWallet(privateKey, error));
     }
   }
 
@@ -297,165 +347,198 @@ export async function bulkCustomTransaction(
 }
 
 /**
- * Gets the balance of native tokens (ETH, BNB, etc.) for a wallet
- * @param address The wallet address
- * @param rpcUrl The RPC URL for the network
- * @returns The balance in ETH as a string
+ * Gets the balance of native tokens (ETH, BNB, etc.) for a wallet.
+ * `rpcUrl` may be one URL or several separated by commas.
  */
-export async function getNativeBalance(address: string, rpcUrl: string): Promise<string> {
-  const provider = createProvider(rpcUrl);
-  const balance = await provider.getBalance(address);
-  return ethers.formatEther(balance);
+export async function getNativeBalance(
+  address: string,
+  rpcUrl: string,
+  transport?: JsonRpcTransport
+): Promise<string> {
+  const pool = openRpcPool(rpcUrl, transport);
+  const balance = await rpcHex(pool, "eth_getBalance", [address, "latest"]);
+  return ethers.formatEther(BigInt(balance));
 }
 
 /**
- * Gets the balance of an ERC20 token for a wallet
- * @param address The wallet address
- * @param tokenAddress The token contract address
- * @param rpcUrl The RPC URL for the network
- * @returns The token balance as a string
+ * Gets the balance of an ERC20 token for a wallet.
+ * `rpcUrl` may be one URL or several separated by commas.
  */
 export async function getTokenBalance(
   address: string,
   tokenAddress: string,
-  rpcUrl: string
+  rpcUrl: string,
+  transport?: JsonRpcTransport
 ): Promise<string> {
-  const provider = createProvider(rpcUrl);
-  const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
-  
-  const decimals = await tokenContract.decimals();
-  const balance = await tokenContract.balanceOf(address);
-  
+  const pool = openRpcPool(rpcUrl, transport);
+  const decimals = Number((await readContract(pool, tokenAddress, "decimals"))[0]);
+  const balance = (await readContract(pool, tokenAddress, "balanceOf", [address]))[0];
   return ethers.formatUnits(balance, decimals);
 }
 
 /**
- * Gets the transaction count for a wallet address
- * @param address The wallet address
- * @param rpcUrl The RPC URL for the network
- * @returns The transaction count as a number
+ * Gets the transaction count for a wallet address.
+ * `rpcUrl` may be one URL or several separated by commas.
  */
 export async function getTransactionCount(
   address: string,
-  rpcUrl: string
+  rpcUrl: string,
+  transport?: JsonRpcTransport
 ): Promise<number> {
-  const provider = createProvider(rpcUrl);
-  const txCount = await provider.getTransactionCount(address);
-  return txCount;
+  const pool = openRpcPool(rpcUrl, transport);
+  const txCount = await rpcHex(pool, "eth_getTransactionCount", [address, "latest"]);
+  return Number(BigInt(txCount));
 }
 
-/**
- * Checks native token balances for multiple wallets in bulk
- * @param addresses Array of wallet addresses
- * @param rpcUrl The RPC URL for the network
- * @param onProgress Optional callback for progress updates
- * @returns Array of operation results with wallet addresses, balances, and transaction counts
- */
-export async function bulkCheckNativeBalance(
-  addresses: string[],
-  rpcUrl: string,
-  onProgress?: ProgressCallback
-): Promise<BulkOperationResult[]> {
-  const provider = createProvider(rpcUrl);
-  const results: BulkOperationResult[] = [];
-  const total = addresses.length;
+const ADDRESS_CHECK_CONCURRENCY = 10;
 
-  for (let i = 0; i < addresses.length; i++) {
-    const address = addresses[i];
-    
-    // Update progress
-    if (onProgress) {
-      onProgress(i + 1, total);
+function checkConcurrency(endpointCount: number): number {
+  return endpointCount > 1 ? ADDRESS_CHECK_CONCURRENCY : 1;
+}
+
+async function mapInOrder<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  onProgress: ProgressCallback | undefined,
+  worker: (item: T) => Promise<R>,
+  label?: (item: T) => string
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let completed = 0;
+  let nextIndex = 0;
+  const total = items.length;
+  const active: string[] = [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const report = () => {
+    if (onProgress) onProgress(completed, total, [...active]);
+  };
+
+  const runOne = async (index: number) => {
+    const item = items[index];
+    const name = label?.(item);
+    if (name) {
+      active.push(name);
+      report();
     }
     try {
-      // Get balance and transaction count in parallel
-      const [balance, txCount] = await Promise.all([
-        provider.getBalance(address),
-        provider.getTransactionCount(address)
-      ]);
-      
-      results.push({
-        walletAddress: address,
-        success: true,
-        balance: ethers.formatEther(balance),
-        txCount: txCount
-      });
-    } catch (error) {
-      console.error(`Error checking wallet data:`, error);
-      results.push({
-        walletAddress: address,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      results[index] = await worker(item);
+    } finally {
+      if (name) {
+        const found = active.indexOf(name);
+        if (found >= 0) active.splice(found, 1);
+      }
+      completed += 1;
+      report();
     }
-  }
+  };
 
+  const loop = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      await runOne(index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: limit }, () => loop()));
   return results;
 }
 
 /**
- * Checks token balances for multiple wallets in bulk
- * @param addresses Array of wallet addresses
- * @param tokenAddress The token contract address
- * @param rpcUrl The RPC URL for the network
- * @param onProgress Optional callback for progress updates
- * @returns Array of operation results with wallet addresses and token balances
+ * Checks native token balances for multiple wallets in bulk.
+ * `rpcUrl` may be one URL or several separated by commas.
+ * Several endpoints keep 10 addresses in flight. A finished address is replaced immediately.
+ */
+export async function bulkCheckNativeBalance(
+  addresses: string[],
+  rpcUrl: string,
+  onProgress?: ProgressCallback,
+  transport?: JsonRpcTransport
+): Promise<BulkOperationResult[]> {
+  const pool = openRpcPool(rpcUrl, transport);
+  return mapInOrder(
+    addresses,
+    checkConcurrency(pool.endpoints.length),
+    onProgress,
+    async (address) => {
+      try {
+        const [balance, txCount] = await Promise.all([
+          rpcHex(pool, "eth_getBalance", [address, "latest"]),
+          rpcHex(pool, "eth_getTransactionCount", [address, "latest"]),
+        ]);
+        return {
+          walletAddress: address,
+          success: true,
+          balance: ethers.formatEther(BigInt(balance)),
+          txCount: Number(BigInt(txCount)),
+        };
+      } catch (error) {
+        console.error(`Error checking wallet data:`, error);
+        return {
+          walletAddress: address,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+    (address) => address
+  );
+}
+
+/**
+ * Checks token balances for multiple wallets in bulk.
+ * `rpcUrl` may be one URL or several separated by commas.
+ * Several endpoints keep 10 addresses in flight. A finished address is replaced immediately.
  */
 export async function bulkCheckTokenBalance(
   addresses: string[],
   tokenAddress: string,
   rpcUrl: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  transport?: JsonRpcTransport
 ): Promise<BulkOperationResult[]> {
-  const provider = createProvider(rpcUrl);
+  const pool = openRpcPool(rpcUrl, transport);
   const results: BulkOperationResult[] = [];
-  const total = addresses.length;
 
   try {
-    // Initialize token contract
-    const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
-    
-    // Get token metadata
-    const [symbol, decimals] = await Promise.all([
-      tokenContract.symbol(),
-      tokenContract.decimals()
+    const [symbolResult, decimalsResult] = await Promise.all([
+      readContract(pool, tokenAddress, "symbol"),
+      readContract(pool, tokenAddress, "decimals"),
     ]);
+    const symbol = String(symbolResult[0]);
+    const decimals = Number(decimalsResult[0]);
 
-    for (let i = 0; i < addresses.length; i++) {
-      const address = addresses[i];
-      
-      // Update progress
-      if (onProgress) {
-        onProgress(i + 1, total);
-      }
-      
-      try {
-        // Get token balance and transaction count in parallel
-        const [balance, txCount] = await Promise.all([
-          tokenContract.balanceOf(address),
-          provider.getTransactionCount(address)
-        ]);
-        
-        results.push({
-          walletAddress: address,
-          success: true,
-          balance: ethers.formatUnits(balance, decimals),
-          txCount: txCount,
-          tokenSymbol: symbol,
-          tokenDecimals: decimals
-        });
-      } catch (error) {
-        console.error(`Error checking token balance for wallet:`, error);
-        results.push({
-          walletAddress: address,
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    return mapInOrder(
+      addresses,
+      checkConcurrency(pool.endpoints.length),
+      onProgress,
+      async (address) => {
+        try {
+          const [balanceResult, txCount] = await Promise.all([
+            readContract(pool, tokenAddress, "balanceOf", [address]),
+            rpcHex(pool, "eth_getTransactionCount", [address, "latest"]),
+          ]);
+          return {
+            walletAddress: address,
+            success: true,
+            balance: ethers.formatUnits(balanceResult[0], decimals),
+            txCount: Number(BigInt(txCount)),
+            tokenSymbol: symbol,
+            tokenDecimals: decimals,
+          };
+        } catch (error) {
+          console.error(`Error checking token balance for wallet:`, error);
+          return {
+            walletAddress: address,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+      (address) => address
+    );
   } catch (error) {
     console.error(`Error initializing token contract:`, error);
-    // If token contract initialization fails, mark all addresses as failed
     for (const address of addresses) {
       results.push({
         walletAddress: address,
